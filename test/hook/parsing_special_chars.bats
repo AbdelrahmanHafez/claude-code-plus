@@ -25,7 +25,9 @@ load hook_test_helper
 }
 
 @test "parse: real bashly docker command" {
+  # shellcheck disable=SC2016
   run_parse_commands 'docker run --rm -v "$PWD:/app" dannyben/bashly generate'
+  # shellcheck disable=SC2016
   assert_commands 'docker run --rm -v "$PWD:/app" dannyben/bashly generate'
 }
 
