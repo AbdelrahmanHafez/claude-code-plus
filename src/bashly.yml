@@ -8,12 +8,11 @@ flags:
     arg: dir
     help: "Path to .claude directory (default: ~/.claude)"
 
-  - long: --hook-prefix
-    short: -p
-    arg: prefix
-    help: "Prefix for hook filename (e.g., 'executable_' for chezmoi)"
-
   - long: --shell
     short: -s
     arg: shell_path
     help: "Path to shell (default: modern bash)"
+
+  - long: --yes
+    short: -y
+    help: "Non-interactive mode, accept all defaults"

@@ -4,7 +4,7 @@ This file helps Claude Code understand the project structure and development wor
 
 ## Project Overview
 
-Better Claude Code is an installer that fixes bugs and adds enhancements to Claude Code CLI. It addresses two main issues:
+Better Claude Code is an installer that enhances Claude Code CLI. It addresses two main issues:
 
 1. **Piped commands not auto-approved** ([#13340](https://github.com/anthropics/claude-code/issues/13340)) - Fixed via a PreToolUse hook
 2. **Custom shell not respected** ([#7490](https://github.com/anthropics/claude-code/issues/7490)) - Fixed via settings.json env config
@@ -12,24 +12,22 @@ Better Claude Code is an installer that fixes bugs and adds enhancements to Clau
 ## Project Structure
 
 ```
-better-claude-code/
-├── install              # Generated single-file installer (DO NOT EDIT DIRECTLY)
+better-claude/
+├── install.sh           # Generated single-file installer (DO NOT EDIT DIRECTLY)
 ├── README.md            # User documentation
 ├── CLAUDE.md            # This file
+├── test/
+│   ├── test_helper.bash # Common test helpers and assertions
+│   └── install.bats     # All installer tests
 └── src/
-    ├── bashly.yml       # Bashly CLI configuration (commands, flags, args)
-    ├── lib/             # Shared helper functions
-    │   ├── colors.sh    # Terminal output helpers (info, success, error, etc.)
-    │   ├── deps.sh      # Dependency checking and installation
-    │   ├── settings.sh  # Claude settings.json manipulation
-    │   ├── hook_script.sh # Generates the allow-piped.sh hook
-    │   └── permissions.sh # Default safe Bash permissions list
-    └── *_command.sh     # Implementation for each CLI command
-        ├── all_command.sh
-        ├── dependencies_command.sh
-        ├── shell_command.sh
-        ├── hook_command.sh
-        └── permissions_command.sh
+    ├── bashly.yml       # Bashly CLI configuration (flags, args)
+    ├── root_command.sh  # Main installer logic
+    └── lib/             # Shared helper functions
+        ├── colors.sh    # Terminal output helpers (info, success, error, etc.)
+        ├── deps.sh      # Dependency checking and installation
+        ├── settings.sh  # Claude settings.json manipulation + hook config
+        ├── hook_script.sh # Generates the auto-approve-allowed-commands.sh hook content
+        └── permissions.sh # Default safe Bash permissions list
 ```
 
 ## Development Workflow
@@ -39,28 +37,31 @@ better-claude-code/
 This project uses [bashly](https://bashly.dev) to generate a single executable from modular source files.
 
 ```bash
-# Generate the installer (requires Docker)
+# Generate the installer
+/opt/homebrew/lib/ruby/gems/3.4.0/bin/bashly generate
+# Or with Docker:
 docker run --rm -v "$PWD:/app" dannyben/bashly generate
 
 # Test the installer
-./install --help
-./install all
+./install.sh --help
+./install.sh
 ```
 
 ### Code Style
 
-- **Step-down style**: All files use `main()` at the top, with helper functions defined below in order of abstraction
+- **Step-down style**: `main()` at the top, helper functions below in order of abstraction
 - **Section comments**: Use `# --- Section Name ---` to group related functions
 - **Error handling**: Use `|| true` after arithmetic operations like `((count++))` to avoid exit code issues with `set -e`
+- **Private functions**: Prefix with `_` for functions not meant to be called externally
 
 ### Key Design Decisions
 
-1. **Single file output**: The `install` script is self-contained for easy `curl | bash` distribution
+1. **Single file output**: The `install.sh` script is self-contained for easy `curl | bash` distribution
 2. **Homebrew dependency**: We rely on Homebrew for macOS package management (prompts to install if missing)
-3. **Configurable paths**: `--claude-dir` flag allows installation to custom directories (for dotfiles managers)
-4. **Hook filename prefix**: `--hook-prefix` flag adds a prefix to the hook filename (e.g., `executable_` for chezmoi)
-5. **Generated hook script**: The hook has the claude directory path baked in at install time via `generate_hook_script()`
-6. **Separate file path vs settings path**: The hook file can have a prefix, but settings.json always references `$HOME/.claude/hooks/allow-piped.sh` (the runtime path after dotfiles are applied)
+3. **Modern bash default**: Defaults to Homebrew's bash 4.4+ instead of macOS's ancient bash 3.2
+4. **Configurable paths**: `--claude-dir` flag allows installation to custom directories (for dotfiles managers)
+5. **Hook filename prefix**: `--hook-prefix` flag adds a prefix to the hook filename (e.g., `executable_` for chezmoi)
+6. **Separate file path vs settings path**: The hook file can have a prefix, but settings.json always references `$HOME/.claude/hooks/auto-approve-allowed-commands.sh` (the runtime path after dotfiles are applied)
 
 ### Testing
 
@@ -68,7 +69,7 @@ docker run --rm -v "$PWD:/app" dannyben/bashly generate
 
 #### Automated Tests (bats)
 
-This project uses [bats-core](https://github.com/bats-core/bats-core) for automated testing. Tests are in the `test/` directory.
+This project uses [bats-core](https://github.com/bats-core/bats-core) for automated testing.
 
 ```bash
 # Install bats-core (if not already installed)
@@ -77,23 +78,11 @@ brew install bats-core
 # Run all tests
 bats test/
 
-# Run a specific test file
-bats test/hook.bats
-
 # Run tests with verbose output
 bats --verbose-run test/
-
-# Run tests in TAP format
-bats --tap test/
 ```
 
-Test files:
-- `test/test_helper.bash` - Common helper functions (setup, assertions)
-- `test/dependencies.bats` - Tests for `install dependencies`
-- `test/shell.bats` - Tests for `install shell`
-- `test/hook.bats` - Tests for `install hook`
-- `test/permissions.bats` - Tests for `install permissions`
-- `test/all.bats` - Tests for `install all`
+Test file: `test/install.bats` - All installer tests (shell, hook, permissions, idempotency, etc.)
 
 Each test creates a fresh temp directory (`$TEST_DIR`) and cleans it up after, so tests are isolated and safe.
 
@@ -101,16 +90,13 @@ Each test creates a fresh temp directory (`$TEST_DIR`) and cleans it up after, s
 
 ```bash
 # Test with custom directory (ALWAYS use /tmp for testing)
-./install --claude-dir /tmp/test-claude all
+./install.sh --claude-dir /tmp/test-claude
 
 # Test with chezmoi-style prefix
-./install -d /tmp/test-claude -p executable_ all
+./install.sh -d /tmp/test-claude -p executable_
 
-# Test individual commands
-./install -d /tmp/test-claude dependencies
-./install -d /tmp/test-claude shell --shell /opt/homebrew/bin/fish
-./install -d /tmp/test-claude hook
-./install -d /tmp/test-claude permissions
+# Test with custom shell
+./install.sh -d /tmp/test-claude --shell /bin/zsh
 
 # Clean up after testing
 rm -rf /tmp/test-claude
@@ -129,17 +115,10 @@ DEFAULT_PERMISSIONS=(
 
 Then regenerate with bashly.
 
-### Adding New Commands
-
-1. Add the command to `src/bashly.yml`
-2. Run `docker run --rm -v "$PWD:/app" dannyben/bashly generate` (creates stub file)
-3. Implement the command in the generated `src/<name>_command.sh`
-4. Regenerate to bundle it into `./install`
-
 ## Dependencies
 
 **Build time:**
-- Docker (for running bashly)
+- bashly (Ruby gem or Docker)
 
 **Runtime (installed automatically):**
 - Homebrew
@@ -195,21 +174,6 @@ sed -n '45,95p' src/old-file.sh > src/new-file.sh
 **Step 3: Modify the extracted code**
 - Now modify the extracted code (wrap in function, remove unwanted bits, etc.)
 - Git diff shows only the actual modifications
-
-#### Useful CLI Commands
-```bash
-# Extract specific line range
-sed -n '10,50p' file.sh >> target.sh
-
-# Extract from line to end of file
-sed -n '100,$p' file.sh >> target.sh
-
-# Extract last N lines
-tail -n 20 file.sh >> target.sh
-
-# Extract first N lines
-head -n 20 file.sh > target.sh
-```
 
 #### When to Use These Approaches
 - Moving code from one file to another

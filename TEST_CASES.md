@@ -135,11 +135,11 @@ This file documents test cases needed to verify the solution works correctly.
 
 | Format | Example | Test Result |
 |--------|---------|-------------|
-| `$HOME` expansion | `$HOME/.claude/hooks/allow-piped.sh` | ? |
-| Tilde expansion | `~/.claude/hooks/allow-piped.sh` | ? |
-| Relative to settings.json | `./hooks/allow-piped.sh` | ? |
-| Relative to home | `.claude/hooks/allow-piped.sh` | ? |
-| Absolute path | `/Users/hafez/.claude/hooks/allow-piped.sh` | ? |
+| `$HOME` expansion | `$HOME/.claude/hooks/auto-approve-allowed-commands.sh` | ? |
+| Tilde expansion | `~/.claude/hooks/auto-approve-allowed-commands.sh` | ? |
+| Relative to settings.json | `./hooks/auto-approve-allowed-commands.sh` | ? |
+| Relative to home | `.claude/hooks/auto-approve-allowed-commands.sh` | ? |
+| Absolute path | `/Users/hafez/.claude/hooks/auto-approve-allowed-commands.sh` | ? |
 
 ---
 
@@ -440,7 +440,7 @@ These must NEVER be auto-approved regardless of other permissions:
 ## Parity Tests
 
 Compare behavior between:
-1. Original `~/dotfiles/dot_claude/hooks/executable_allow-piped.sh`
+1. Original `~/dotfiles/dot_claude/hooks/executable_auto-approve-allowed-commands.sh`
 2. Generated hook from this installer
 
 Results must match exactly for all test cases above.

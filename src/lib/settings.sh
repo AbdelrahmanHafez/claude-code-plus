@@ -4,22 +4,19 @@
 CLAUDE_DIR=""
 CLAUDE_SETTINGS=""
 CLAUDE_HOOKS_DIR=""
-HOOK_FILE_PREFIX=""
 
 # --- Initialization (must be called before using other functions) ---
 
 init_claude_paths() {
   local custom_dir="${1:-}"
-  local hook_prefix="${2:-}"
 
   CLAUDE_DIR="${custom_dir:-$HOME/.claude}"
   CLAUDE_SETTINGS="$CLAUDE_DIR/settings.json"
   CLAUDE_HOOKS_DIR="$CLAUDE_DIR/hooks"
-  HOOK_FILE_PREFIX="${hook_prefix:-}"
 }
 
 get_hook_filename() {
-  echo "${HOOK_FILE_PREFIX}allow-piped.sh"
+  echo "auto-approve-allowed-commands.sh"
 }
 
 get_hook_filepath() {
@@ -119,24 +116,17 @@ write_settings() {
 # --- Hook configuration ---
 
 configure_hook_in_settings() {
-  step "Configuring hook in settings"
-
-  # Check if our hook is already configured (look for allow-piped.sh in PreToolUse Bash hooks)
   if hook_already_configured; then
-    success "Hook already configured in settings"
     return 0
   fi
-
-  info "Adding hook configuration to settings"
   add_hook_to_settings
-  success "Hook configured in settings"
 }
 
 add_hook_to_settings() {
   # Settings always reference the non-prefixed filename at $HOME/.claude
   # (prefix is only for dotfiles managers like chezmoi)
   # shellcheck disable=SC2016
-  local new_hook='{"type": "command", "command": "$HOME/.claude/hooks/allow-piped.sh"}'
+  local new_hook='{"type": "command", "command": "$HOME/.claude/hooks/auto-approve-allowed-commands.sh"}'
 
   local current new
   current=$(get_settings)
@@ -170,11 +160,11 @@ add_hook_to_settings() {
 }
 
 hook_already_configured() {
-  # Check if PreToolUse has a Bash matcher with allow-piped.sh command
+  # Check if PreToolUse has a Bash matcher with auto-approve-allowed-commands.sh command
   get_settings | jq -e '
     .hooks.PreToolUse[]?
     | select(.matcher == "Bash")
     | .hooks[]?
-    | select(.command | endswith("allow-piped.sh"))
+    | select(.command | endswith("auto-approve-allowed-commands.sh"))
   ' &>/dev/null
 }

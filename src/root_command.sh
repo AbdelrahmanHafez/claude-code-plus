@@ -1,24 +1,68 @@
 main() {
   local claude_dir="${args['--claude-dir']:-}"
-  local hook_prefix="${args['--hook-prefix']:-}"
+  local non_interactive="${args['--yes']:-}"
 
-  init_claude_paths "$claude_dir" "$hook_prefix"
+  init_claude_paths "$claude_dir"
 
-  _all_print_banner
-  _all_print_overview
+  print_banner
 
-  _all_step_deps
-  _all_step_shell
-  _all_step_hook
-  _all_step_permissions
+  step_deps
 
-  _all_print_completion
+  local mode="recommended"
+  if [[ -z "$non_interactive" ]]; then
+    mode=$(prompt_install_mode)
+  fi
+
+  if [[ "$mode" == "recommended" ]]; then
+    run_recommended_install
+  else
+    run_custom_install
+  fi
+
+  print_completion
 }
 
-# --- Steps (quiet versions for bundled install) ---
+# --- Install modes ---
 
-_all_step_deps() {
-  step "Step 1/4: Dependencies"
+run_recommended_install() {
+  info "Installing with recommended settings..."
+  echo ""
+
+  step_shell
+  step_hook
+  step_permissions
+}
+
+run_custom_install() {
+  info "Custom installation..."
+  echo ""
+
+  # Shell selection
+  if prompt_yes_no "Set which shell Claude Code uses?" "Y"; then
+    step_shell
+  else
+    info "Skipping shell configuration"
+  fi
+
+  # Hook installation
+  if prompt_yes_no "Auto-approve piped commands that match allowed patterns?" "Y"; then
+    step_hook
+  else
+    info "Skipping hook installation"
+  fi
+
+  # Permissions
+  if prompt_yes_no "Pre-approve common safe commands (ls, git status, grep, etc.)?" "Y"; then
+    step_permissions
+  else
+    info "Skipping permissions"
+  fi
+}
+
+# --- Steps ---
+
+step_deps() {
+  step "Checking dependencies"
 
   if check_all_deps; then
     success "All dependencies present"
@@ -26,6 +70,13 @@ _all_step_deps() {
   fi
 
   warn "Some dependencies missing"
+
+  # Non-interactive mode: auto-install
+  if [[ -n "${args['--yes']:-}" ]]; then
+    install_missing_deps || exit 1
+    return
+  fi
+
   read -p "Install missing dependencies? [Y/n] " -n 1 -r
   echo ""
 
@@ -37,8 +88,8 @@ _all_step_deps() {
   install_missing_deps || exit 1
 }
 
-_all_step_shell() {
-  step "Step 2/4: Shell configuration"
+step_shell() {
+  step "Configuring shell"
 
   local shell_path="${args['--shell']:-}"
 
@@ -74,8 +125,8 @@ _all_step_shell() {
   success "Shell configured"
 }
 
-_all_step_hook() {
-  step "Step 3/4: Installing allow-piped hook"
+step_hook() {
+  step "Installing hook to auto-approve allowed commands"
 
   local hook_file
   hook_file=$(get_hook_filepath)
@@ -86,6 +137,7 @@ _all_step_hook() {
     info "Hook already exists, updating..."
   fi
 
+  # shellcheck disable=SC2153
   generate_hook_script "$CLAUDE_DIR" > "$hook_file"
   chmod +x "$hook_file"
   success "Hook installed"
@@ -93,8 +145,8 @@ _all_step_hook() {
   configure_hook_in_settings
 }
 
-_all_step_permissions() {
-  step "Step 4/4: Adding safe permissions"
+step_permissions() {
+  step "Adding safe permissions"
 
   local added=0
 
@@ -114,7 +166,7 @@ _all_step_permissions() {
 
 # --- Output ---
 
-_all_print_banner() {
+print_banner() {
   echo ""
   echo "╔════════════════════════════════════════════╗"
   echo "║       Better Claude Code Installer         ║"
@@ -122,16 +174,55 @@ _all_print_banner() {
   echo ""
 }
 
-_all_print_overview() {
-  info "This installer will:"
-  echo "  1. Check/install dependencies (bash 4.4+, shfmt, jq)"
-  echo "  2. Configure your preferred shell"
-  echo "  3. Install the allow-piped hook"
-  echo "  4. Add safe command permissions"
+# --- Prompts ---
+
+prompt_install_mode() {
+  echo "Choose installation mode:"
   echo ""
+  echo "  [1] Recommended - Install everything with sensible defaults"
+  echo "      • Modern bash (4.4+) as shell"
+  echo "      • Auto-approve hook for compound commands"
+  echo "      • Safe read-only command permissions"
+  echo ""
+  echo "  [2] Custom - Choose what to install"
+  echo ""
+
+  local choice
+  while true; do
+    read -p "Enter choice [1/2]: " -n 1 -r choice
+    echo ""
+    case "$choice" in
+      1) echo "recommended"; return ;;
+      2) echo "custom"; return ;;
+      "") echo "recommended"; return ;;  # Default to recommended
+      *) warn "Please enter 1 or 2" ;;
+    esac
+  done
 }
 
-_all_print_completion() {
+prompt_yes_no() {
+  local prompt="$1"
+  local default="${2:-Y}"  # Y or N
+
+  local hint
+  if [[ "$default" == "Y" ]]; then
+    hint="[Y/n]"
+  else
+    hint="[y/N]"
+  fi
+
+  local reply
+  read -p "$prompt $hint " -n 1 -r reply
+  echo ""
+
+  if [[ -z "$reply" ]]; then
+    reply="$default"
+  fi
+
+  [[ "$reply" =~ ^[Yy]$ ]]
+}
+
+print_completion() {
   echo ""
   echo "╔════════════════════════════════════════════╗"
   echo "║            Installation Complete!          ║"
@@ -139,8 +230,10 @@ _all_print_completion() {
   echo ""
   success "Better Claude Code is now configured!"
   echo ""
-  info "Changes made to: $CLAUDE_SETTINGS"
-  info "Hook installed to: $(get_hook_filepath)"
+  info "Settings file: $CLAUDE_SETTINGS"
+  if [[ -f "$(get_hook_filepath)" ]]; then
+    info "Hook file: $(get_hook_filepath)"
+  fi
   echo ""
   info "Start a new Claude Code session to apply changes."
 }

@@ -51,7 +51,7 @@ The installer will automatically install these dependencies if missing (via Home
 This will:
 1. Check and install dependencies (including Homebrew if needed)
 2. Configure your preferred shell
-3. Install the allow-piped hook
+3. Install the auto-approve-allowed-commands hook
 4. Add safe command permissions
 
 ### Individual Commands
@@ -96,14 +96,14 @@ The hook script will be configured to read settings from your custom directory.
 If you use chezmoi and need the hook file to have a prefix (e.g., `executable_` to make it automatically executable):
 
 ```bash
-# Creates: ~/dotfiles/dot_claude/hooks/executable_allow-piped.sh
+# Creates: ~/dotfiles/dot_claude/hooks/executable_auto-approve-allowed-commands.sh
 ./install -d ~/dotfiles/dot_claude -p executable_ all
 
 # Or long form
 ./install --claude-dir ~/dotfiles/dot_claude --hook-prefix executable_ all
 ```
 
-The settings.json will still reference `$HOME/.claude/hooks/allow-piped.sh` (the path after chezmoi applies the dotfiles).
+The settings.json will still reference `$HOME/.claude/hooks/auto-approve-allowed-commands.sh` (the path after chezmoi applies the dotfiles).
 
 ### Help
 
@@ -117,7 +117,7 @@ The settings.json will still reference `$HOME/.claude/hooks/allow-piped.sh` (the
 | File | Purpose |
 |------|---------|
 | `~/.claude/settings.json` | Updated with shell config, hook config, and permissions |
-| `~/.claude/hooks/allow-piped.sh` | The hook script that enables piped command auto-approval |
+| `~/.claude/hooks/auto-approve-allowed-commands.sh` | The hook script that enables piped command auto-approval |
 
 (Paths change if using `--claude-dir`)
 
@@ -158,7 +158,7 @@ The parser handles:
 
 ```bash
 # Remove the hook
-rm ~/.claude/hooks/allow-piped.sh
+rm ~/.claude/hooks/auto-approve-allowed-commands.sh
 
 # Optionally, remove the hook config from settings.json
 # (or just delete ~/.claude/settings.json to reset everything)

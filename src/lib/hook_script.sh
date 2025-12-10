@@ -1,4 +1,4 @@
-# This file contains a function that generates the allow-piped.sh hook script
+# This file contains a function that generates the auto-approve-allowed-commands.sh hook script
 # The script is generated with the correct CLAUDE_DIR path baked in
 
 generate_hook_script() {
@@ -6,7 +6,7 @@ generate_hook_script() {
 
   cat << HOOK_EOF
 #!/usr/bin/env bash
-# allow-piped.sh - Hook to allow piped commands where ALL components are in allowed Bash permissions.
+# auto-approve-allowed-commands.sh - Hook to auto-approve compound commands where ALL components match allowed Bash permissions.
 # Claude Code's prefix matching doesn't handle pipes - this hook fixes that.
 #
 # Dynamically reads allowed commands from:

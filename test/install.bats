@@ -27,13 +27,13 @@ teardown() {
 @test "creates hook file" {
   run_install
   [ "$status" -eq 0 ]
-  assert_file_exists "$TEST_DIR/hooks/allow-piped.sh"
+  assert_file_exists "$TEST_DIR/hooks/auto-approve-allowed-commands.sh"
 }
 
 @test "hook file is executable" {
   run_install
   [ "$status" -eq 0 ]
-  assert_executable "$TEST_DIR/hooks/allow-piped.sh"
+  assert_executable "$TEST_DIR/hooks/auto-approve-allowed-commands.sh"
 }
 
 @test "hook file has correct shebang" {
@@ -41,7 +41,7 @@ teardown() {
   [ "$status" -eq 0 ]
 
   local first_line
-  first_line=$(head -1 "$TEST_DIR/hooks/allow-piped.sh")
+  first_line=$(head -1 "$TEST_DIR/hooks/auto-approve-allowed-commands.sh")
   [ "$first_line" = "#!/usr/bin/env bash" ]
 }
 
@@ -49,7 +49,7 @@ teardown() {
   run_install
   [ "$status" -eq 0 ]
 
-  grep -q "CLAUDE_DIR=\"$TEST_DIR\"" "$TEST_DIR/hooks/allow-piped.sh"
+  grep -q "CLAUDE_DIR=\"$TEST_DIR\"" "$TEST_DIR/hooks/auto-approve-allowed-commands.sh"
 }
 
 # --- Shell configuration ---
@@ -118,7 +118,7 @@ EOF
 
   # Verify both hooks are present
   jq -e '.hooks.PreToolUse[] | select(.matcher == "Bash") | .hooks[] | select(.command == "existing-hook.sh")' "$TEST_DIR/settings.json"
-  jq -e '.hooks.PreToolUse[] | select(.matcher == "Bash") | .hooks[] | select(.command | contains("allow-piped.sh"))' "$TEST_DIR/settings.json"
+  jq -e '.hooks.PreToolUse[] | select(.matcher == "Bash") | .hooks[] | select(.command | contains("auto-approve-allowed-commands.sh"))' "$TEST_DIR/settings.json"
 }
 
 @test "preserves other matchers (Read, Write, etc.)" {
@@ -253,14 +253,14 @@ EOF
 
   [ "$status" -eq 0 ]
   assert_file_exists "$custom_dir/settings.json"
-  assert_file_exists "$custom_dir/hooks/allow-piped.sh"
+  assert_file_exists "$custom_dir/hooks/auto-approve-allowed-commands.sh"
 }
 
 @test "respects hook prefix" {
   run_install -p executable_
   [ "$status" -eq 0 ]
-  assert_file_exists "$TEST_DIR/hooks/executable_allow-piped.sh"
-  assert_executable "$TEST_DIR/hooks/executable_allow-piped.sh"
+  assert_file_exists "$TEST_DIR/hooks/executable_auto-approve-allowed-commands.sh"
+  assert_executable "$TEST_DIR/hooks/executable_auto-approve-allowed-commands.sh"
 }
 
 @test "settings reference non-prefixed hook path" {
@@ -270,6 +270,6 @@ EOF
   # Even with prefix, settings should reference the runtime path without prefix
   local command_path
   command_path=$(jq -r '.hooks.PreToolUse[0].hooks[0].command' "$TEST_DIR/settings.json")
-  [[ "$command_path" == *"allow-piped.sh"* ]]
+  [[ "$command_path" == *"auto-approve-allowed-commands.sh"* ]]
   [[ "$command_path" != *"executable_"* ]]
 }

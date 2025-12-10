@@ -1,4 +1,4 @@
-# Install the allow-piped hook
+# Install the auto-approve-allowed-commands hook
 # Usage: action_install_hook [claude_dir] [hook_prefix]
 action_install_hook() {
   local claude_dir="${1:-}"
@@ -6,7 +6,7 @@ action_install_hook() {
 
   init_claude_paths "$claude_dir" "$hook_prefix"
 
-  step "Installing allow-piped hook"
+  step "Installing auto-approve-allowed-commands hook"
 
   ensure_hooks_dir
   _hook_install_script
@@ -46,7 +46,7 @@ _hook_prompt_overwrite() {
 
 _hook_print_success() {
   echo ""
-  success "allow-piped hook installed and configured!"
+  success "auto-approve-allowed-commands hook installed and configured!"
   echo ""
   info "The hook will auto-approve piped commands like 'ls | grep foo'"
   info "when all individual commands are in your allowed permissions."

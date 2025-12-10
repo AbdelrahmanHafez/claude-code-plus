@@ -129,7 +129,7 @@ Use arrow keys to navigate, space to toggle, enter to confirm.
 
 **Logic:**
 1. Read existing `.hooks.PreToolUse` array (or empty if none)
-2. Check if `allow-piped.sh` hook already exists
+2. Check if `auto-approve-allowed-commands.sh` hook already exists
 3. If not, append our hook to the array
 4. Write back merged result
 
@@ -157,7 +157,7 @@ Use arrow keys to navigate, space to toggle, enter to confirm.
 ### Parity tests (compare to ~/dotfiles originals)
 ```bash
 # For each test case, run BOTH:
-# 1. Original ~/dotfiles/dot_claude/hooks/executable_allow-piped.sh
+# 1. Original ~/dotfiles/dot_claude/hooks/executable_auto-approve-allowed-commands.sh
 # 2. Generated hook from this installer
 # Results must match exactly
 
@@ -967,7 +967,7 @@ Choice [1]:
 ### Option 1: Install everything
 
 If user selects "Install everything", run all steps automatically:
-1. Install allow-piped hook
+1. Install auto-approve-allowed-commands hook
 2. Configure shell (with picker if needed)
 3. Add all safe permissions
 
@@ -978,7 +978,7 @@ Show a checklist:
 ```
 Select features to install (space to toggle, enter to confirm):
 
-  [x] Allow-piped hook
+  [x] Auto-approve-allowed-commands hook
       Enables auto-approval of piped commands (ls | grep foo)
       when all components are individually allowed
 
@@ -998,8 +998,8 @@ Press Enter to continue...
 ```
 Installing selected features...
 
-Step 1/3: Installing allow-piped hook
-  ✓ Hook installed to ~/.claude/hooks/allow-piped.sh
+Step 1/3: Installing auto-approve-allowed-commands hook
+  ✓ Hook installed to ~/.claude/hooks/auto-approve-allowed-commands.sh
   ✓ Hook configured in settings.json
 
 Step 2/3: Configuring shell
@@ -1024,7 +1024,7 @@ Step 3/3: Adding permissions
 Installation complete!
 
 Changes made:
-  ✓ ~/.claude/hooks/allow-piped.sh
+  ✓ ~/.claude/hooks/auto-approve-allowed-commands.sh
   ✓ ~/.claude/settings.json
 
 Start a new Claude Code session to apply changes.
@@ -1100,7 +1100,7 @@ For the feature/permission selection checklists:
 1. **Simple numbered menu** (works everywhere)
    ```
    Select features (comma-separated, e.g., 1,2,3):
-     1) Allow-piped hook
+     1) Auto-approve-allowed-commands hook
      2) Shell configuration
      3) Safe permissions
 
@@ -1119,7 +1119,7 @@ For the feature/permission selection checklists:
 
 ## 14. Document and showcase hook capabilities
 
-**Goal:** Create documentation that showcases how smart the allow-piped hook is, helping users understand its capabilities and building trust.
+**Goal:** Create documentation that showcases how smart the auto-approve-allowed-commands hook is, helping users understand its capabilities and building trust.
 
 ### Features to document
 
@@ -1221,7 +1221,7 @@ echo 'rm -rf /'
 ```markdown
 ## How the Hook Works
 
-The allow-piped hook uses `shfmt` to parse commands into an AST, then checks
+The auto-approve-allowed-commands hook uses `shfmt` to parse commands into an AST, then checks
 each component against your allowed permissions. This handles complex shell
 syntax that simple prefix matching can't:
 
@@ -1496,7 +1496,7 @@ validate_shell() {
       "matcher": "Bash",
       "hooks": [{
         "type": "command",
-        "command": "$HOME/.claude/hooks/allow-piped.sh"
+        "command": "$HOME/.claude/hooks/auto-approve-allowed-commands.sh"
       }]
     }]
   }
@@ -1505,9 +1505,9 @@ validate_shell() {
 
 **Goal:** Use relative path if possible:
 ```json
-"command": "~/.claude/hooks/allow-piped.sh"
+"command": "~/.claude/hooks/auto-approve-allowed-commands.sh"
 // or
-"command": ".claude/hooks/allow-piped.sh"
+"command": ".claude/hooks/auto-approve-allowed-commands.sh"
 ```
 
 **Questions to test:**
@@ -1519,13 +1519,13 @@ validate_shell() {
 **Test plan:**
 ```bash
 # Test 1: Tilde expansion
-"command": "~/.claude/hooks/allow-piped.sh"
+"command": "~/.claude/hooks/auto-approve-allowed-commands.sh"
 
 # Test 2: Relative to settings.json
-"command": "./hooks/allow-piped.sh"
+"command": "./hooks/auto-approve-allowed-commands.sh"
 
 # Test 3: Relative to home
-"command": ".claude/hooks/allow-piped.sh"
+"command": ".claude/hooks/auto-approve-allowed-commands.sh"
 ```
 
 **File:** `src/all_command.sh` - `configure_hook_in_settings()`

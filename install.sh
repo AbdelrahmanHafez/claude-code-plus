@@ -18,20 +18,20 @@ root_command() {
 
     init_claude_paths "$claude_dir" "$hook_prefix"
 
-    _all_print_banner
-    _all_print_overview
+    print_banner
+    print_overview
 
-    _all_step_deps
-    _all_step_shell
-    _all_step_hook
-    _all_step_permissions
+    step_deps
+    step_shell
+    step_hook
+    step_permissions
 
-    _all_print_completion
+    print_completion
   }
 
-  # --- Steps (quiet versions for bundled install) ---
+  # --- Steps ---
 
-  _all_step_deps() {
+  step_deps() {
     step "Step 1/4: Dependencies"
 
     if check_all_deps; then
@@ -51,7 +51,7 @@ root_command() {
     install_missing_deps || exit 1
   }
 
-  _all_step_shell() {
+  step_shell() {
     step "Step 2/4: Shell configuration"
 
     local shell_path="${args['--shell']:-}"
@@ -88,7 +88,7 @@ root_command() {
     success "Shell configured"
   }
 
-  _all_step_hook() {
+  step_hook() {
     step "Step 3/4: Installing allow-piped hook"
 
     local hook_file
@@ -107,7 +107,7 @@ root_command() {
     configure_hook_in_settings
   }
 
-  _all_step_permissions() {
+  step_permissions() {
     step "Step 4/4: Adding safe permissions"
 
     local added=0
@@ -128,7 +128,7 @@ root_command() {
 
   # --- Output ---
 
-  _all_print_banner() {
+  print_banner() {
     echo ""
     echo "╔════════════════════════════════════════════╗"
     echo "║       Better Claude Code Installer         ║"
@@ -136,7 +136,7 @@ root_command() {
     echo ""
   }
 
-  _all_print_overview() {
+  print_overview() {
     info "This installer will:"
     echo "  1. Check/install dependencies (bash 4.4+, shfmt, jq)"
     echo "  2. Configure your preferred shell"
@@ -145,7 +145,7 @@ root_command() {
     echo ""
   }
 
-  _all_print_completion() {
+  print_completion() {
     echo ""
     echo "╔════════════════════════════════════════════╗"
     echo "║            Installation Complete!          ║"
@@ -276,209 +276,6 @@ inspect_args() {
 }
 
 # :command.user_lib
-# src/lib/actions/deps.sh
-# Check and optionally install dependencies
-# Usage: action_check_deps
-action_check_deps() {
-  step "Checking dependencies"
-
-  if check_all_deps; then
-    _deps_print_success
-    return 0
-  fi
-
-  _deps_prompt_install
-}
-
-_deps_print_success() {
-  echo ""
-  success "All dependencies are installed"
-}
-
-_deps_prompt_install() {
-  echo ""
-  warn "Some dependencies are missing"
-  echo ""
-  read -p "Install missing dependencies? [Y/n] " -n 1 -r
-  echo ""
-
-  if [[ $REPLY =~ ^[Nn]$ ]]; then
-    error "Cannot continue without dependencies"
-    exit 1
-  fi
-
-  install_missing_deps
-}
-
-# src/lib/actions/hook.sh
-# Install the allow-piped hook
-# Usage: action_install_hook [claude_dir] [hook_prefix]
-action_install_hook() {
-  local claude_dir="${1:-}"
-  local hook_prefix="${2:-}"
-
-  init_claude_paths "$claude_dir" "$hook_prefix"
-
-  step "Installing allow-piped hook"
-
-  ensure_hooks_dir
-  _hook_install_script
-  configure_hook_in_settings
-  _hook_print_success
-}
-
-_hook_install_script() {
-  local hook_file
-  hook_file=$(get_hook_filepath)
-
-  if [[ -f "$hook_file" ]]; then
-    _hook_prompt_overwrite "$hook_file" || return 0
-  fi
-
-  info "Writing hook to $hook_file"
-  # shellcheck disable=SC2153  # CLAUDE_DIR is set by init_claude_paths
-  generate_hook_script "$CLAUDE_DIR" > "$hook_file"
-  chmod +x "$hook_file"
-  success "Hook script created"
-}
-
-_hook_prompt_overwrite() {
-  local hook_file="$1"
-
-  warn "Hook already exists at $hook_file"
-  read -p "Overwrite? [y/N] " -n 1 -r
-  echo ""
-
-  if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-    info "Skipping hook installation"
-    return 1
-  fi
-
-  return 0
-}
-
-_hook_print_success() {
-  echo ""
-  success "allow-piped hook installed and configured!"
-  echo ""
-  info "The hook will auto-approve piped commands like 'ls | grep foo'"
-  info "when all individual commands are in your allowed permissions."
-}
-
-# src/lib/actions/permissions.sh
-# Add safe command permissions to Claude settings
-# Usage: action_install_permissions <claude_dir> [hook_prefix]
-action_install_permissions() {
-  local claude_dir="${1:-}"
-  local hook_prefix="${2:-}"
-
-  init_claude_paths "$claude_dir" "$hook_prefix"
-
-  step "Adding safe command permissions"
-  _permissions_print_overview
-  _permissions_add
-  _permissions_print_footer
-}
-
-_permissions_print_overview() {
-  info "This adds read-only and safe commands to your allowed permissions."
-  info "These commands will auto-approve without prompting."
-  echo ""
-}
-
-_permissions_add() {
-  local added=0
-  local skipped=0
-
-  for perm in "${DEFAULT_PERMISSIONS[@]}"; do
-    if array_contains '.permissions.allow' "\"$perm\""; then
-      ((skipped++)) || true
-    else
-      array_add '.permissions.allow' "\"$perm\""
-      ((added++)) || true
-    fi
-  done
-
-  if [[ $added -eq 0 ]]; then
-    success "All ${#DEFAULT_PERMISSIONS[@]} permissions already configured"
-  else
-    success "Added $added new permissions ($skipped already existed)"
-  fi
-}
-
-_permissions_print_footer() {
-  echo ""
-  info "Permissions are stored in: $CLAUDE_SETTINGS"
-}
-
-# src/lib/actions/shell.sh
-# Configure the shell Claude uses for Bash commands
-# Usage: action_install_shell <claude_dir> <hook_prefix> [shell_path]
-action_install_shell() {
-  local claude_dir="${1:-}"
-  local hook_prefix="${2:-}"
-  local shell_path="${3:-}"
-
-  # Default to modern bash if not specified
-  if [[ -z "$shell_path" ]]; then
-    if ! shell_path=$(find_modern_bash); then
-      error "Modern bash (4.4+) not found"
-      info "Install with: brew install bash"
-      info "Or specify a shell with: --shell /path/to/shell"
-      exit 1
-    fi
-  fi
-
-  init_claude_paths "$claude_dir" "$hook_prefix"
-
-  step "Configuring Claude shell"
-
-  _shell_validate "$shell_path"
-  _shell_configure "$shell_path"
-}
-
-_shell_validate() {
-  local shell_path="$1"
-
-  if [[ ! -x "$shell_path" ]]; then
-    error "Shell not found or not executable: $shell_path"
-    exit 1
-  fi
-}
-
-_shell_configure() {
-  local shell_path="$1"
-  local shell_name
-  shell_name=$(basename "$shell_path")
-
-  info "Using shell: $shell_path ($shell_name)"
-
-  local current_shell
-  current_shell=$(get_setting '.env.SHELL')
-
-  if [[ "$current_shell" == "$shell_path" ]]; then
-    success "Shell already configured to $shell_path"
-    return 0
-  fi
-
-  if [[ -n "$current_shell" ]]; then
-    info "Updating shell from $current_shell to $shell_path"
-  else
-    info "Setting shell to $shell_path"
-  fi
-
-  set_setting '.env.SHELL' "\"$shell_path\""
-
-  success "Claude will now use $shell_name ($shell_path)"
-  _shell_print_footer
-}
-
-_shell_print_footer() {
-  echo ""
-  info "This sets the SHELL environment variable in Claude's settings."
-  info "Claude will use this shell for all Bash tool executions."
-}
-
 # src/lib/colors.sh
 # Terminal colors and output helpers
 
@@ -1282,17 +1079,10 @@ write_settings() {
 # --- Hook configuration ---
 
 configure_hook_in_settings() {
-  step "Configuring hook in settings"
-
-  # Check if our hook is already configured (look for allow-piped.sh in PreToolUse Bash hooks)
   if hook_already_configured; then
-    success "Hook already configured in settings"
     return 0
   fi
-
-  info "Adding hook configuration to settings"
   add_hook_to_settings
-  success "Hook configured in settings"
 }
 
 add_hook_to_settings() {
