@@ -427,14 +427,38 @@ extract_commands_raw() {
 
 # Check if a command is "bash -c" or "sh -c" and extract the inner command
 # Returns the inner command string if it matches, empty otherwise
+# Handles:
+#   - bash -c 'cmd' / sh -c 'cmd'
+#   - /bin/bash -c 'cmd' / /usr/bin/bash -c 'cmd' (absolute paths)
+#   - env bash -c 'cmd' / env sh -c 'cmd' (env prefix)
+#   - env /bin/bash -c 'cmd' (env with absolute path)
 get_shell_c_inner() {
   local cmd="$1"
 
-  # Match: bash -c '...' or bash -c "..." or sh -c '...' or sh -c "..."
-  # Also handle: bash -c'...' (no space)
-  if [[ "$cmd" =~ ^(bash|sh)[[:space:]]+-c[[:space:]]*[\'\"](.*)[\'\"]$ ]]; then
+  # Pattern components:
+  # - Optional 'env ' prefix
+  # - Optional path prefix (e.g., /bin/, /usr/bin/)
+  # - bash or sh
+  # - -c flag with optional space
+  # - quoted string
+  # Note: Using separate checks for clarity and to avoid complex regex escaping
+
+  # Strip optional 'env ' prefix first
+  local stripped="$cmd"
+  if [[ "$cmd" =~ ^env[[:space:]]+ ]]; then
+    stripped="${cmd#env }"
+    stripped="${stripped# }"  # Remove any extra spaces
+  fi
+
+  # Strip optional path prefix (e.g., /bin/, /usr/bin/)
+  if [[ "$stripped" =~ ^/[^[:space:]]*/(.+)$ ]]; then
+    stripped="${BASH_REMATCH[1]}"
+  fi
+
+  # Now match: bash -c '...' or sh -c '...'
+  if [[ "$stripped" =~ ^(bash|sh)[[:space:]]+-c[[:space:]]*[\'\"](.*)[\'\"]$ ]]; then
     echo "${BASH_REMATCH[2]}"
-  elif [[ "$cmd" =~ ^(bash|sh)[[:space:]]+-c[\'\"](.*)[\'\"]$ ]]; then
+  elif [[ "$stripped" =~ ^(bash|sh)[[:space:]]+-c[\'\"](.*)[\'\"]$ ]]; then
     echo "${BASH_REMATCH[2]}"
   fi
 }

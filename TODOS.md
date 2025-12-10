@@ -6,12 +6,12 @@
 - [x] [2. Categorize permissions into JSON files](#2-categorize-permissions-into-json-files) - WON'T FIX (single file approach chosen instead)
 - [x] [3. Interactive permission category selection](#3-interactive-permission-category-selection) - WON'T FIX (depends on #2)
 - [x] [4. Preserve existing settings.json content](#4-preserve-existing-settingsjson-content)
-- [ ] [5. Extensive security tests against original dotfiles](#5-extensive-security-tests-against-original-dotfiles) ⚠️ CRITICAL
+- [x] [5. Extensive security tests against original dotfiles](#5-extensive-security-tests-against-original-dotfiles) ✅ 445 tests implemented
 - [ ] [6. CI pipeline for tests and linting](#6-ci-pipeline-for-tests-and-linting)
 - [ ] [7. Automate installer generation in CI](#7-automate-installer-generation-in-ci)
 - [x] [8. Should the installer have a `.sh` extension?](#8-should-the-installer-have-a-sh-extension) - Yes, using `install.sh`
-- [ ] [9. Tests for complex command parsing edge cases](#9-tests-for-complex-command-parsing-edge-cases)
-- [ ] [10. Tests for string content not being parsed as commands](#10-tests-for-string-content-not-being-parsed-as-commands)
+- [x] [9. Tests for complex command parsing edge cases](#9-tests-for-complex-command-parsing-edge-cases) ✅ Implemented in test/hook/*.bats
+- [x] [10. Tests for string content not being parsed as commands](#10-tests-for-string-content-not-being-parsed-as-commands) ✅ Implemented in parsing_string_safety.bats
 - [x] [11. Shell configuration with alias workaround](#11-shell-configuration-with-alias-workaround)
 - [ ] [12. Dotfiles manager support for shell config modifications](#12-dotfiles-manager-support-for-shell-config-modifications)
 - [ ] [13. Redesign installer flow with customization options](#13-redesign-installer-flow-with-customization-options)
@@ -20,7 +20,8 @@
 - [x] [16. Remove --hook-prefix flag after dotfiles manager support](#16-remove---hook-prefix-flag-after-dotfiles-manager-support)
 - [x] [17. Default shell to bash instead of $SHELL](#17-default-shell-to-bash-instead-of-shell)
 - [x] [18. Use relative hook path in settings.json](#18-use-relative-hook-path-in-settingsjson) - Uses `$HOME` which Claude expands at runtime
-- [ ] [19. Test commands with colons](#19-test-commands-with-colons)
+- [x] [19. Test commands with colons](#19-test-commands-with-colons) ✅ Implemented in parsing_special_chars.bats
+- [ ] [20. Regex-based allowlist for conditional command approval](#20-regex-based-allowlist-for-conditional-command-approval)
 
 ---
 
@@ -1584,3 +1585,258 @@ validate_shell() {
   # Should extract: docker
 }
 ```
+
+---
+
+## 20. Regex-based allowlist for conditional command approval
+
+**Goal:** Allow commands that are "mostly safe" but have dangerous flags/options, using regex to exclude the dangerous cases.
+
+### Problem
+
+Many useful commands have dual-use potential:
+- `find` is safe... unless it has `-exec` (runs arbitrary commands)
+- `brew` info/search is safe... unless it's `brew install` (installs packages)
+- `awk` is safe for text processing... unless it uses `system()` calls
+- `env` / `printenv` leak ALL environment variables including secrets
+
+Claude Code's built-in permissions only support prefix matching with `:*`, which can't express "allow X except when Y".
+
+### Proposed solution
+
+Add a new `allowRegex` field in settings.json that accepts regex patterns:
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "Bash(git status:*)",
+      "Bash(ls:*)"
+    ],
+    "allowRegex": [
+      "Bash(find (?!.*-exec)(?!.*-execdir).*)",
+      "Bash(brew (info|search|list|deps|cat|desc|home|leaves|outdated|doctor|config):*)",
+      "Bash(awk (?!.*system\\s*\\().*)",
+      "Bash(sed (?!.*-i).*)",
+      "Bash(env (?!.*=)\\s*\\w+)",
+      "Bash(fzf (?!.*--preview).*)"
+    ],
+    "deny": []
+  }
+}
+```
+
+### High-risk commands to support
+
+| Command | Risk Level | Dangerous Pattern | Safe Pattern |
+|---------|------------|-------------------|--------------|
+| `brew` | CRITICAL | `brew install`, `brew upgrade` | `brew info`, `brew search`, `brew list` |
+| `awk` | CRITICAL | `system()` call | Normal text processing |
+| `find` | CRITICAL | `-exec`, `-execdir` flags | `-name`, `-type`, `-print` |
+| `fzf` | CRITICAL | `--preview` flag | Basic fuzzy finding |
+| `env` | CRITICAL | No args (dumps all) | With specific var name |
+| `printenv` | CRITICAL | No args (dumps all) | With specific var name |
+| `sed` | HIGH | `-i` flag (in-place edit) | Print to stdout |
+| `tee` | HIGH | Any use (writes to files) | Maybe with `-a` only? |
+| `mkdir` | MEDIUM | `.ssh`, `.git/hooks` paths | Normal directories |
+| `plutil` | HIGH | `-replace`, `-insert` flags | `-p` (print only) |
+| `brew upgrade` | MEDIUM | Any use | N/A (always risky) |
+| `pass ls` | HIGH | Any use (exposes structure) | N/A |
+| `defaults read` | MEDIUM | Sensitive domains | Non-sensitive domains |
+| `openssl s_client` | LOW | Any use (network) | Maybe specific hosts? |
+
+### Implementation approach
+
+#### Option A: Hook-based (recommended)
+
+Extend the existing `auto-approve-allowed-commands.sh` hook:
+
+```bash
+# After checking standard prefix permissions, check regex permissions
+check_regex_permissions() {
+  local cmd="$1"
+  local regex_perms
+
+  # Read allowRegex from settings.json
+  regex_perms=$(jq -r '.permissions.allowRegex // [] | .[]' "$SETTINGS_FILE")
+
+  while IFS= read -r pattern; do
+    # Extract the regex from Bash(...)
+    local regex="${pattern#Bash(}"
+    regex="${regex%)}"
+
+    if [[ "$cmd" =~ $regex ]]; then
+      return 0  # Allowed
+    fi
+  done <<< "$regex_perms"
+
+  return 1  # Not matched
+}
+```
+
+#### Option B: Separate deny-regex field
+
+Instead of positive regex matching, use negative patterns:
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "Bash(find:*)",
+      "Bash(brew:*)",
+      "Bash(awk:*)"
+    ],
+    "denyRegex": [
+      "Bash(find.*-exec.*)",
+      "Bash(brew (install|upgrade|uninstall).*)",
+      "Bash(awk.*system\\s*\\(.*)"
+    ]
+  }
+}
+```
+
+**Precedence:** `denyRegex` > `allow` > default deny
+
+### Regex patterns for each command
+
+#### find (block -exec/-execdir)
+```regex
+^find\s+(?!.*\s-exec)(?!.*\s-execdir).*$
+```
+
+#### brew (allow only read-only subcommands)
+```regex
+^brew\s+(info|search|list|leaves|deps|desc|cat|home|outdated|doctor|config|--version|--prefix|--cellar|--caskroom|tap-info)(\s+.*)?$
+```
+
+#### awk (block system() calls)
+```regex
+^awk\s+'(?!.*system\s*\().*'(\s+.*)?$
+```
+Note: This is tricky because system() could be obfuscated. Consider blocking awk entirely.
+
+#### sed (block -i flag)
+```regex
+^sed\s+(?!.*-i\b).*$
+```
+
+#### env/printenv (require specific variable name)
+```regex
+^(env|printenv)\s+[A-Z_][A-Z0-9_]*\s*$
+```
+
+#### fzf (block --preview)
+```regex
+^fzf\s+(?!.*--preview).*$
+```
+
+#### mkdir (block sensitive paths)
+```regex
+^mkdir\s+(?!.*\.ssh)(?!.*\.git/hooks)(?!.*\.gnupg).*$
+```
+
+#### plutil (allow only print mode)
+```regex
+^plutil\s+-p\s+.*$
+```
+
+### Test cases
+
+```bash
+# find
+"find . -name '*.txt'"              # ALLOW
+"find . -type f -print"             # ALLOW
+"find . -exec rm {} \;"             # DENY
+"find . -execdir cat {} \;"         # DENY
+"find . -name foo -exec echo {} +"  # DENY
+
+# brew
+"brew info jq"                      # ALLOW
+"brew search json"                  # ALLOW
+"brew list"                         # ALLOW
+"brew install malware"              # DENY
+"brew upgrade"                      # DENY
+"brew uninstall jq"                 # DENY
+
+# awk
+"awk '{print $1}' file.txt"         # ALLOW
+"awk '/pattern/ {print}'"           # ALLOW
+"awk 'BEGIN{system(\"rm -rf /\")}'" # DENY
+
+# sed
+"sed 's/foo/bar/g' file.txt"        # ALLOW
+"sed -n '1,10p' file.txt"           # ALLOW
+"sed -i 's/foo/bar/g' file.txt"     # DENY
+"sed -i.bak 's/foo/bar/' file.txt"  # DENY
+
+# env/printenv
+"env HOME"                          # ALLOW
+"printenv PATH"                     # ALLOW
+"env"                               # DENY (dumps all)
+"printenv"                          # DENY (dumps all)
+"env | grep API"                    # DENY (dumps all, even with pipe)
+
+# fzf
+"fzf"                               # ALLOW
+"fzf --height 40%"                  # ALLOW
+"fzf --preview 'cat {}'"            # DENY
+"fzf --preview='rm {}'"             # DENY
+
+# mkdir
+"mkdir foo"                         # ALLOW
+"mkdir -p src/components"           # ALLOW
+"mkdir .ssh"                        # DENY
+"mkdir -p .git/hooks"               # DENY
+"mkdir ~/.gnupg"                    # DENY
+```
+
+### Security considerations
+
+1. **Regex complexity:** Complex regexes can be bypassed. Keep patterns simple and conservative.
+
+2. **Shell expansion:** Commands are checked AFTER shell expansion, so `$VAR` is already resolved.
+
+3. **Bypass via encoding:** Watch for:
+   - Unicode lookalikes
+   - Hex/octal escapes
+   - Variable interpolation tricks
+
+4. **Performance:** Regex matching on every command could slow things down. Consider:
+   - Only apply regex if standard prefix matching fails
+   - Cache compiled regex patterns
+   - Limit number of regex rules
+
+5. **Default to deny:** If regex matching fails or errors, deny the command.
+
+### User documentation
+
+Add to README:
+
+```markdown
+## Advanced: Regex-based Permissions
+
+For commands that are safe in some forms but dangerous in others, you can use regex patterns:
+
+\`\`\`json
+{
+  "permissions": {
+    "allowRegex": [
+      "Bash(find (?!.*-exec).*)",
+      "Bash(sed (?!.*-i).*)"
+    ]
+  }
+}
+\`\`\`
+
+This allows `find` and `sed` commands EXCEPT when they contain dangerous flags.
+
+**Note:** Regex permissions are applied AFTER standard prefix matching. Use them sparingly
+for commands that truly need conditional approval.
+\`\`\`
+
+### Implementation phases
+
+**Phase 1:** Add `allowRegex` support to the hook script
+**Phase 2:** Add default regex rules for common dual-use commands
+**Phase 3:** Add installer option to enable/configure regex permissions
+**Phase 4:** Documentation and examples

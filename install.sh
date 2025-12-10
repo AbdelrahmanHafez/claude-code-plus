@@ -1094,14 +1094,38 @@ extract_commands_raw() {
 
 # Check if a command is "bash -c" or "sh -c" and extract the inner command
 # Returns the inner command string if it matches, empty otherwise
+# Handles:
+#   - bash -c 'cmd' / sh -c 'cmd'
+#   - /bin/bash -c 'cmd' / /usr/bin/bash -c 'cmd' (absolute paths)
+#   - env bash -c 'cmd' / env sh -c 'cmd' (env prefix)
+#   - env /bin/bash -c 'cmd' (env with absolute path)
 get_shell_c_inner() {
   local cmd="$1"
 
-  # Match: bash -c '...' or bash -c "..." or sh -c '...' or sh -c "..."
-  # Also handle: bash -c'...' (no space)
-  if [[ "$cmd" =~ ^(bash|sh)[[:space:]]+-c[[:space:]]*[\'\"](.*)[\'\"]$ ]]; then
+  # Pattern components:
+  # - Optional 'env ' prefix
+  # - Optional path prefix (e.g., /bin/, /usr/bin/)
+  # - bash or sh
+  # - -c flag with optional space
+  # - quoted string
+  # Note: Using separate checks for clarity and to avoid complex regex escaping
+
+  # Strip optional 'env ' prefix first
+  local stripped="$cmd"
+  if [[ "$cmd" =~ ^env[[:space:]]+ ]]; then
+    stripped="${cmd#env }"
+    stripped="${stripped# }"  # Remove any extra spaces
+  fi
+
+  # Strip optional path prefix (e.g., /bin/, /usr/bin/)
+  if [[ "$stripped" =~ ^/[^[:space:]]*/(.+)$ ]]; then
+    stripped="${BASH_REMATCH[1]}"
+  fi
+
+  # Now match: bash -c '...' or sh -c '...'
+  if [[ "$stripped" =~ ^(bash|sh)[[:space:]]+-c[[:space:]]*[\'\"](.*)[\'\"]$ ]]; then
     echo "${BASH_REMATCH[2]}"
-  elif [[ "$cmd" =~ ^(bash|sh)[[:space:]]+-c[\'\"](.*)[\'\"]$ ]]; then
+  elif [[ "$stripped" =~ ^(bash|sh)[[:space:]]+-c[\'\"](.*)[\'\"]$ ]]; then
     echo "${BASH_REMATCH[2]}"
   fi
 }
@@ -1225,7 +1249,6 @@ DEFAULT_PERMISSIONS=(
   "Bash(asdf plugin list:*)"
   "Bash(atuin --version:*)"
   "Bash(atuin history stats:*)"
-  "Bash(awk:*)"
   "Bash(aws --version:*)"
   "Bash(aws cloudformation describe-stacks:*)"
   "Bash(aws cloudformation list-stacks:*)"
@@ -1297,7 +1320,6 @@ DEFAULT_PERMISSIONS=(
   "Bash(brew outdated:*)"
   "Bash(brew search:*)"
   "Bash(brew tap-info:*)"
-  "Bash(brew upgrade:*)"
   "Bash(brew uses:*)"
   "Bash(broot --version:*)"
   "Bash(btm --version:*)"
@@ -1376,7 +1398,6 @@ DEFAULT_PERMISSIONS=(
   "Bash(cursor --version:*)"
   "Bash(cut:*)"
   "Bash(date:*)"
-  "Bash(defaults read:*)"
   "Bash(delta --version:*)"
   "Bash(delta:*)"
   "Bash(deno --version:*)"
@@ -1460,7 +1481,6 @@ DEFAULT_PERMISSIONS=(
   "Bash(elixirc --version:*)"
   "Bash(emacs --version:*)"
   "Bash(entr --version:*)"
-  "Bash(env:*)"
   "Bash(erl -version:*)"
   "Bash(eslint --version:*)"
   "Bash(exa --version:*)"
@@ -1470,7 +1490,6 @@ DEFAULT_PERMISSIONS=(
   "Bash(eza:*)"
   "Bash(fd:*)"
   "Bash(file:*)"
-  "Bash(find:*)"
   "Bash(flake8 --version:*)"
   "Bash(fnm --version:*)"
   "Bash(fnm current:*)"
@@ -1479,7 +1498,6 @@ DEFAULT_PERMISSIONS=(
   "Bash(free:*)"
   "Bash(fswatch --version:*)"
   "Bash(fzf --version:*)"
-  "Bash(fzf:*)"
   "Bash(g++ --version:*)"
   "Bash(gcc --version:*)"
   "Bash(gcloud --version:*)"
@@ -1731,7 +1749,6 @@ DEFAULT_PERMISSIONS=(
   "Bash(mise plugins:*)"
   "Bash(mix --version:*)"
   "Bash(mix deps.tree:*)"
-  "Bash(mkdir:*)"
   "Bash(mongo --version:*)"
   "Bash(mongosh --version:*)"
   "Bash(more:*)"
@@ -1801,14 +1818,12 @@ DEFAULT_PERMISSIONS=(
   "Bash(op --version:*)"
   "Bash(opam --version:*)"
   "Bash(opam list:*)"
-  "Bash(openssl s_client:*)"
   "Bash(openssl version:*)"
   "Bash(otool:*)"
   "Bash(oxlint --version:*)"
   "Bash(packer --version:*)"
   "Bash(pandoc --version:*)"
   "Bash(pass --version:*)"
-  "Bash(pass ls:*)"
   "Bash(paste:*)"
   "Bash(pdftotext:*)"
   "Bash(pdm --version:*)"
@@ -1841,7 +1856,6 @@ DEFAULT_PERMISSIONS=(
   "Bash(pip3 show:*)"
   "Bash(pipx --version:*)"
   "Bash(pipx list:*)"
-  "Bash(plutil:*)"
   "Bash(pmset -g:*)"
   "Bash(pnpm --version:*)"
   "Bash(pnpm -v:*)"
@@ -1864,7 +1878,6 @@ DEFAULT_PERMISSIONS=(
   "Bash(poetry version:*)"
   "Bash(pre-commit --version:*)"
   "Bash(prettier --version:*)"
-  "Bash(printenv:*)"
   "Bash(procs --version:*)"
   "Bash(procs:*)"
   "Bash(protoc --version:*)"
@@ -1939,7 +1952,6 @@ DEFAULT_PERMISSIONS=(
   "Bash(sdk version:*)"
   "Bash(security find-identity:*)"
   "Bash(security list-keychains:*)"
-  "Bash(sed:*)"
   "Bash(seq:*)"
   "Bash(shasum:*)"
   "Bash(shell-commands:*)"
@@ -1974,7 +1986,6 @@ DEFAULT_PERMISSIONS=(
   "Bash(task --list:*)"
   "Bash(task --version:*)"
   "Bash(taskfile --version:*)"
-  "Bash(tee:*)"
   "Bash(terraform --version:*)"
   "Bash(terraform fmt -check:*)"
   "Bash(terraform graph:*)"

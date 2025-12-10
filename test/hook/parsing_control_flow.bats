@@ -50,10 +50,10 @@ load hook_test_helper
 
 @test "parse: double nested subshell" {
   # ((expr)) is arithmetic evaluation in bash, not double subshell
-  # Real double nesting would be ( (ls) )
-  skip "Behavioral: ((cmd)) is arithmetic evaluation, not double subshell"
+  # Real double nesting would be ( (ls) ) with space
+  # Arithmetic evaluation extracts no commands (SAFE)
   run_parse_commands '((ls))'
-  assert_commands "ls"
+  assert_no_commands
 }
 
 @test "parse: nested subshell with pipe" {

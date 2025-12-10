@@ -7,8 +7,8 @@ This document contains comprehensive test cases for the auto-approve hook system
 | Metric | Count |
 |--------|-------|
 | **Total Tests** | 445 |
-| **Passing** | 430 |
-| **Skipped** | 15 (behavioral only) |
+| **Passing** | 445 |
+| **Skipped** | 0 |
 | **Test Files** | 12 |
 
 **Run all tests:** `bats test/hook/`
@@ -72,11 +72,11 @@ Track implementation progress for each category:
   - [x] Simple bash -c
   - [x] Nested bash -c
   - [x] bash -c with dangerous commands
-  - [x] bash -c variations - ⚠️ `/bin/bash -c` not unwrapped
+  - [x] bash -c variations - ✅ `/bin/bash -c` and `env bash -c` now unwrapped
   - [x] Not bash -c (similar patterns that are different)
 - [x] [Category 11: Environment Variables and Assignments](#category-11-environment-variables-and-assignments) *(parsing_env_redirect.bats)*
   - [x] Variable assignments before command
-  - [x] Export and declare - ⚠️ Builtins not extracted
+  - [x] Export and declare - declarations not extracted (SAFE)
   - [x] Variable expansion
 - [x] [Category 12: Redirections](#category-12-redirections) *(parsing_env_redirect.bats)*
   - [x] Output redirections
@@ -90,7 +90,7 @@ Track implementation progress for each category:
   - [x] Source/dot
   - [x] Inline code execution (dangerous)
 - [x] [Category 14: Functions](#category-14-functions) *(parsing_builtins.bats)*
-  - [x] Function definitions - ⚠️ Not extracted as commands
+  - [x] Function definitions - ✅ body commands now extracted
   - [x] Function calls
 - [x] [Category 15: Command Paths](#category-15-command-paths) *(parsing_builtins.bats)*
   - [x] Absolute paths

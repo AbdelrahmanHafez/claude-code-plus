@@ -4,8 +4,8 @@ This report summarizes findings from comprehensive testing of the auto-approve h
 
 **Test Date:** December 2024
 **Total Tests:** 445
-**Passing:** 430
-**Skipped (behavioral, not security):** 15
+**Passing:** 445
+**Skipped:** 0
 
 ---
 
@@ -100,14 +100,14 @@ These are parser behaviors that differ from expectations but don't pose security
 | `${arr[0]}` | `$arr` | Array index simplified |
 | `${VAR:-default}` | `$VAR` | Default value stripped |
 
-### Unwrapping Limitations
+### Unwrapping Support
 
 | Pattern | Unwrapped? | Notes |
 |---------|------------|-------|
 | `bash -c 'cmd'` | ✅ Yes | Correctly extracts inner command |
 | `sh -c 'cmd'` | ✅ Yes | Correctly extracts inner command |
-| `/bin/bash -c 'cmd'` | ❌ No | Absolute path not recognized |
-| `env bash -c 'cmd'` | ❌ No | Prefix prevents unwrapping |
+| `/bin/bash -c 'cmd'` | ✅ Yes | Absolute path now supported |
+| `env bash -c 'cmd'` | ✅ Yes | env prefix now supported |
 
 ---
 
@@ -125,18 +125,18 @@ These are parser behaviors that differ from expectations but don't pose security
 | Quoted strings | 26 | ✅ All pass |
 | String content safety | 26 | ✅ All pass |
 | Subshells | 10 | ✅ All pass |
-| Loops and conditionals | 21 | 1 skipped (behavioral) |
-| bash -c unwrapping | 23 | 2 skipped (behavioral) |
-| Environment variables | 15 | 4 skipped (behavioral) |
+| Loops and conditionals | 21 | ✅ All pass |
+| bash -c unwrapping | 23 | ✅ All pass |
+| Environment variables | 15 | ✅ All pass |
 | Redirections | 15 | ✅ All pass |
 | Builtins | 24 | ✅ All pass |
-| Functions | 3 | 3 skipped (behavioral) |
+| Functions | 3 | ✅ All pass |
 | Paths | 21 | ✅ All pass |
 | xargs/find | 34 | ✅ All pass |
 | Permission matching | 29 | ✅ All pass |
 | Real-world commands | 58 | ✅ All pass |
 | Security (dangerous cmds) | 27 | ✅ All pass |
-| Edge cases | 48 | 3 skipped (behavioral) |
+| Edge cases | 48 | ✅ All pass |
 
 ### Security Tests Passing
 
@@ -162,7 +162,6 @@ The hook correctly blocks:
 ### Remaining Improvements
 
 1. **Add warnings** for dangerous permissions (`xargs:*`, `find:*`)
-2. **Add absolute path detection** for `bash -c` (`/bin/bash`, `/usr/bin/bash`)
 
 ### Long-term Considerations
 
@@ -182,7 +181,7 @@ The hook correctly blocks:
 
 3. **Dangerous permissions:** Open - Should we maintain a list and show warnings, or trust users to understand the implications?
 
-4. **Absolute paths:** Open - Should `/bin/bash -c` be treated the same as `bash -c`?
+4. **Absolute paths:** ✅ Resolved - `/bin/bash -c` and `env bash -c` now properly unwrapped
 
 5. **Permission granularity:** Open - Is the current prefix-matching system sufficient, or do we need more sophisticated patterns?
 

@@ -131,19 +131,19 @@ load hook_test_helper
 # Only the function body commands should be extracted
 
 @test "parse: simple function definition" {
-  skip "Behavioral: function definitions not extracted as commands"
+  # skip "Behavioral: function definitions not extracted as commands"
   run_parse_commands 'foo() { echo hello; }'
   assert_commands "echo hello"
 }
 
 @test "parse: function keyword syntax" {
-  skip "Behavioral: function definitions not extracted as commands"
+  # skip "Behavioral: function definitions not extracted as commands"
   run_parse_commands 'function foo { echo hello; }'
   assert_commands "echo hello"
 }
 
 @test "parse: function with multiple commands" {
-  skip "Behavioral: function definitions not extracted as commands"
+  # skip "Behavioral: function definitions not extracted as commands"
   run_parse_commands 'foo() { cmd1; cmd2; cmd3; }'
   assert_commands "cmd1" "cmd2" "cmd3"
 }

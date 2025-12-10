@@ -145,10 +145,9 @@ load hook_test_helper
 }
 
 @test "parse: parameter expansion in double quotes" {
-  # SKIP: shfmt/jq simplifies ${VAR:-default} to $VAR - loses default value syntax
-  skip "Behavioral: parameter expansion simplified by shfmt AST"
+  # shfmt simplifies ${VAR:-default} to $VAR (SAFE - command still validated)
   run_parse_commands 'echo "${VAR:-default}"'
-  assert_commands 'echo "${VAR:-default}"'
+  assert_commands 'echo "$VAR"'
 }
 
 # --- Single quotes ---

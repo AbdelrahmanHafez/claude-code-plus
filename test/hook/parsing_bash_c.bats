@@ -67,7 +67,7 @@ load hook_test_helper
 
 @test "parse: absolute path bash -c" {
   # Behavioral: /bin/bash doesn't trigger unwrapping, only 'bash' or 'sh'
-  skip "Behavioral: absolute path /bin/bash -c not unwrapped"
+  # skip "Behavioral: absolute path /bin/bash -c not unwrapped"
   run_parse_commands "/bin/bash -c 'rm file'"
   assert_commands "rm file"
 }
@@ -82,12 +82,10 @@ load hook_test_helper
 }
 
 @test "parse: env prefix with bash -c" {
-  # Behavioral: when bash -c has a prefix (like env), it's not unwrapped
-  # The entire 'env bash -c ls' is treated as one command
-  skip "Behavioral: bash -c with prefix (env) not unwrapped"
+  # env prefix is stripped, bash -c is unwrapped, inner command extracted
   run_parse_commands "env bash -c 'ls'"
-  # env is extracted as separate command, then ls from bash -c
-  assert_commands "env" "ls"
+  # Only the inner command is extracted (env is just a wrapper)
+  assert_commands "ls"
 }
 
 # =============================================================================
