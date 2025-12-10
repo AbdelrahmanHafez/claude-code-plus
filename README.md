@@ -1,5 +1,9 @@
 # Better Claude Code
 
+> **EXPERIMENTAL** - This project is in early development. Use at your own risk.
+>
+> The hook has [known security limitations](#security-limitations) around command substitution parsing. Review the limitations before using in sensitive environments.
+
 Enhancements for [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI.
 
 ## Quick Install
@@ -140,6 +144,37 @@ The parser handles:
 - Command substitution: `echo $(cmd1 | cmd2)`
 - `bash -c` / `sh -c`: recursively expanded
 - For/while loops: extracts inner commands
+
+## Security Limitations
+
+The command parser has known limitations that could allow unintended command execution:
+
+### Command Substitution in Double Quotes
+
+Commands inside `$(...)` within double-quoted strings are **not currently extracted** for permission checking.
+
+**Example:** If you have `Bash(echo:*)` permission:
+```bash
+echo "$(rm -rf /)"  # Parser sees only 'echo', not 'rm -rf /'
+```
+
+The `rm -rf /` would execute as part of bash's command substitution, even though you never granted `rm` permission. The permission system gates what Claude Code runs, but once bash executes the command string, substitution happens normally.
+
+**Mitigations:**
+- Only grant permissions to commands you trust completely
+- Review commands carefully when Claude Code prompts for approval
+- The parser does correctly extract commands from `$(...)` outside of quotes
+
+### Intentionally Excluded Permissions
+
+The following are **not** included in default permissions because they can execute arbitrary code:
+
+- `xargs` - runs commands from input
+- `python -c`, `node -e`, `ruby -e` - inline code execution
+- `eval`, `source` - execute arbitrary strings/files
+- `find -exec` - runs commands on matched files
+
+If you add these manually, understand the risks.
 
 ## Uninstall
 
