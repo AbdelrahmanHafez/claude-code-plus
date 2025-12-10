@@ -7,8 +7,8 @@ This document contains comprehensive test cases for the auto-approve hook system
 | Metric | Count |
 |--------|-------|
 | **Total Tests** | 445 |
-| **Passing** | 420 |
-| **Skipped** | 25 |
+| **Passing** | 430 |
+| **Skipped** | 15 (behavioral only) |
 | **Test Files** | 12 |
 
 **Run all tests:** `bats test/hook/`
@@ -54,7 +54,7 @@ Track implementation progress for each category:
 - [x] [Category 7: String Content (NOT parsed as commands)](#category-7-string-content-not-parsed-as-commands) *(parsing_string_safety.bats)*
   - [x] Single-quoted dangerous content (SAFE)
   - [x] Double-quoted dangerous content (SAFE)
-  - [x] Command substitution IS parsed (DANGEROUS) - ⚠️ SECURITY: `$()` in double quotes not extracted
+  - [x] Command substitution IS parsed (DANGEROUS) - ✅ `$()` in double quotes correctly extracted
   - [x] Backtick substitution (legacy syntax)
   - [x] Here-documents (heredocs)
   - [x] Here-strings
@@ -81,7 +81,7 @@ Track implementation progress for each category:
 - [x] [Category 12: Redirections](#category-12-redirections) *(parsing_env_redirect.bats)*
   - [x] Output redirections
   - [x] Input redirections
-  - [x] Process substitution - ⚠️ SECURITY: `<()` contents not extracted
+  - [x] Process substitution - ✅ `<()` and `>()` contents correctly extracted
   - [x] File descriptor manipulation
 - [x] [Category 13: Special Commands and Builtins](#category-13-special-commands-and-builtins) *(parsing_builtins.bats)*
   - [x] Test commands

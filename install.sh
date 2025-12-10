@@ -991,6 +991,18 @@ def get_part_value:
     ""
   end;
 
+# Recursively find all CmdSubst and ProcSubst nodes in word parts (handles DblQuoted nesting)
+def find_cmd_substs:
+  if type == "object" then
+    if .Type == "CmdSubst" or .Type == "ProcSubst" then .
+    elif .Type == "DblQuoted" then .Parts[]? | find_cmd_substs
+    elif .Parts then .Parts[]? | find_cmd_substs
+    else empty
+    end
+  elif type == "array" then .[] | find_cmd_substs
+  else empty
+  end;
+
 # Get full argument value (may have multiple parts concatenated)
 def get_arg_value:
   [.Parts[]? | get_part_value] | join("");
@@ -1008,8 +1020,8 @@ def extract_commands:
   if type == "object" then
     if .Type == "CallExpr" then
       get_command_string,
-      # Also extract nested command substitutions
-      (.Args[]?.Parts[]? | select(.Type == "CmdSubst") | .Stmts[]? | extract_commands)
+      # Also extract nested command substitutions (including inside DblQuoted)
+      (.Args[]? | find_cmd_substs | .Stmts[]? | extract_commands)
     elif .Type == "BinaryCmd" then
       (.X | extract_commands),
       (.Y | extract_commands)
@@ -1025,6 +1037,8 @@ def extract_commands:
       (.Cond[]? | extract_commands),
       (.Do[]? | extract_commands)
     elif .Type == "ForClause" then
+      # Extract from loop iterator (e.g., `for i in $(cmd)`)
+      (.Loop.Items[]? | find_cmd_substs | .Stmts[]? | extract_commands),
       (.Do[]? | extract_commands)
     elif .Type == "CaseClause" then
       (.Items[]?.Stmts[]? | extract_commands)
@@ -1285,7 +1299,6 @@ DEFAULT_PERMISSIONS=(
   "Bash(brew tap-info:*)"
   "Bash(brew upgrade:*)"
   "Bash(brew uses:*)"
-  "Bash(brew:*)"
   "Bash(broot --version:*)"
   "Bash(btm --version:*)"
   "Bash(buf --version:*)"

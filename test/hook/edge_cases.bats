@@ -247,17 +247,16 @@ load hook_test_helper
 
 # --- Process substitution ---
 
-@test "shfmt: process substitution stripped (SECURITY)" {
-  # SECURITY: Process substitution contents are stripped
-  # Commands inside <() are NOT extracted for permission checking
+@test "shfmt: process substitution extracted" {
+  # Process substitution commands ARE extracted for permission checking
   run_parse_commands 'diff <(ls dir1) <(ls dir2)'
-  assert_commands 'diff'
+  assert_commands 'diff' 'ls dir1' 'ls dir2'
 }
 
-@test "shfmt: output process substitution stripped (SECURITY)" {
-  # SECURITY: Output process substitution also stripped
-  run_parse_commands 'tee >(grep error > errors.log)'
-  assert_commands 'tee'
+@test "shfmt: output process substitution extracted" {
+  # Output process substitution commands ARE also extracted
+  run_parse_commands 'tee >(grep error)'
+  assert_commands 'tee' 'grep error'
 }
 
 # --- Brace expansion ---

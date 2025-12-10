@@ -70,19 +70,13 @@ load hook_test_helper
 }
 
 @test "security: $() in double quotes IS extracted" {
-  # SECURITY CONCERN: Command substitution inside double quotes doesn't extract nested command
-  # This means 'echo "$(rm -rf /)"' with permission Bash(echo:*) would be ALLOWED
-  # but the rm -rf / would still execute!
-  skip "SECURITY: nested command in double-quoted \$() not extracted - needs discussion"
-  run_parse_commands 'echo "$(rm -rf /)"'
-  assert_commands 'echo "$(..)"' "rm -rf /"
+  run_parse_commands 'echo "$(whoami)"'
+  assert_commands 'echo "$(..)"' "whoami"
 }
 
 @test "security: mixed literal and substitution" {
-  # Same security concern as above
-  skip "SECURITY: nested command in double-quoted \$() not extracted - needs discussion"
-  run_parse_commands 'echo "prefix $(cmd) suffix"'
-  assert_commands 'echo "prefix $(..) suffix"' "cmd"
+  run_parse_commands 'echo "prefix $(date) suffix"'
+  assert_commands 'echo "prefix $(..) suffix"' "date"
 }
 
 @test "security: substitution as argument" {
@@ -105,10 +99,8 @@ load hook_test_helper
 }
 
 @test "security: backtick in double quotes is extracted" {
-  # Same security concern - backticks in double quotes don't extract nested command
-  skip "SECURITY: nested command in double-quoted backticks not extracted - needs discussion"
-  run_parse_commands 'echo "`whoami`"'
-  assert_commands 'echo "$(..)"' "whoami"
+  run_parse_commands 'echo "`hostname`"'
+  assert_commands 'echo "$(..)"' "hostname"
 }
 
 # =============================================================================

