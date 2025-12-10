@@ -141,8 +141,7 @@ step_hook() {
     info "Hook already exists, updating..."
   fi
 
-  # shellcheck disable=SC2153
-  generate_hook_script "$CLAUDE_DIR" > "$hook_file"
+  get_hook_script_content > "$hook_file"
   chmod +x "$hook_file"
   success "Hook installed"
 
@@ -264,6 +263,8 @@ print_completion() {
     *)    source_cmd="source ~/.bashrc" ;;
   esac
   info "Open a new terminal or run $(cmd "$source_cmd"), then run $(cmd "claude") to start."
+  echo ""
+  info "Review $(cmd "$CLAUDE_SETTINGS") to remove any permissions you don't want auto-approved."
 }
 
 main
