@@ -1,11 +1,11 @@
 # Better Claude Code
 
-Fixes and enhancements for [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI.
+Enhancements for [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI.
 
 ## Quick Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/AbdelrahmanHafez/better-claude-code/main/install | bash
+curl -fsSL https://raw.githubusercontent.com/AbdelrahmanHafez/better-claude-code/main/install.sh | bash
 ```
 
 Or clone and run locally:
@@ -13,22 +13,22 @@ Or clone and run locally:
 ```bash
 git clone https://github.com/AbdelrahmanHafez/better-claude-code.git
 cd better-claude-code
-./install all
+./install.sh
 ```
 
-## What This Fixes
+## What This Does
 
-### 1. Piped Commands Not Auto-Approved (Issue [#13340](https://github.com/anthropics/claude-code/issues/13340))
+### 1. Smart Piped Command Handling (Issue [#13340](https://github.com/anthropics/claude-code/issues/13340))
 
-**Problem:** Claude Code's permission system uses prefix matching on the entire command string. If you allow `Bash(ls:*)` and `Bash(grep:*)`, running `ls | grep foo` still prompts for permission because the full string doesn't start with an allowed prefix.
+**The limitation:** Claude Code's permission system uses prefix matching on the entire command string. If you allow `Bash(ls:*)` and `Bash(grep:*)`, running `ls | grep foo` still prompts for permission because the full string doesn't start with an allowed prefix.
 
-**Solution:** A PreToolUse hook that parses piped commands using `shfmt`, checks each component individually against your allowed permissions, and auto-approves if all parts match.
+**What we add:** A PreToolUse hook that parses piped commands using `shfmt`, checks each component individually against your allowed permissions, and auto-approves if all parts match.
 
-### 2. Custom Shell Not Respected (Issue [#7490](https://github.com/anthropics/claude-code/issues/7490))
+### 2. Shell Configuration for Commands (Issue [#7490](https://github.com/anthropics/claude-code/issues/7490))
 
-**Problem:** Claude Code ignores the `$SHELL` environment variable and always uses the system default shell (`/bin/zsh` on macOS) when executing Bash tool commands. This breaks PATH, aliases, and environment for Fish/Bash users.
+**The limitation:** Claude Code ignores the `$SHELL` environment variable and always uses the system default shell (`/bin/zsh` on macOS) when executing Bash tool commands. Even launching with `SHELL=/opt/homebrew/bin/fish claude` doesn't help. This means you lose access to your PATH, aliases, and shell-specific configuration.
 
-**Solution:** Sets the `SHELL` environment variable in Claude's settings, which tells Claude Code which shell to use for running commands.
+**What we add:** A shell alias that wraps the `claude` command to set `SHELL` in a way that Claude Code respects, plus configures `env.SHELL` in settings.json for when the upstream fix lands.
 
 ## Requirements
 
@@ -42,75 +42,53 @@ The installer will automatically install these dependencies if missing (via Home
 
 ## Usage
 
-### Full Installation (Recommended)
+### Interactive Installation (Recommended)
+
+Simply run:
 
 ```bash
-./install all
+./install.sh
 ```
 
-This will:
-1. Check and install dependencies (including Homebrew if needed)
-2. Configure Claude Code to use your preferred shell for running commands
-3. Install the auto-approve-allowed-commands hook
-4. Add safe command permissions
+You'll be prompted to choose between:
+1. **Recommended** - Installs everything with sensible defaults
+2. **Custom** - Choose which features to install
 
-### Individual Commands
+### Non-Interactive Installation
+
+For scripting or automation:
 
 ```bash
-# Check/install dependencies only
-./install dependencies
-
-# Configure which shell Claude Code uses for commands (auto-detects from $SHELL)
-./install shell
-
-# Or specify a shell explicitly
-./install shell --shell /opt/homebrew/bin/fish
-
-# Install the piped-commands hook
-./install hook
-
-# Add safe read-only command permissions
-./install permissions
+./install.sh -y
 ```
 
-### Custom .claude Directory
+This installs everything with defaults (modern bash, hook, permissions).
 
-For users with dotfiles managers (chezmoi, etc.), you can specify a custom directory:
+### Specifying a Shell
+
+By default, the installer uses Homebrew's modern bash. To use a different shell:
 
 ```bash
-# Install to a custom location
-./install --claude-dir ~/dotfiles/dot_claude all
-
-# Short form
-./install -d ~/dotfiles/dot_claude all
-
-# Works with all subcommands
-./install -d ~/my-claude-config hook
-./install -d ~/my-claude-config permissions
+./install.sh --shell /opt/homebrew/bin/fish
+./install.sh -s /bin/zsh
 ```
-
-The hook script will be configured to read settings from your custom directory.
-
-### Hook Filename Prefix (for chezmoi)
-
-If you use chezmoi and need the hook file to have a prefix (e.g., `executable_` to make it automatically executable):
-
-```bash
-# Creates: ~/dotfiles/dot_claude/hooks/executable_auto-approve-allowed-commands.sh
-./install -d ~/dotfiles/dot_claude -p executable_ all
-
-# Or long form
-./install --claude-dir ~/dotfiles/dot_claude --hook-prefix executable_ all
-```
-
-The settings.json will still reference `$HOME/.claude/hooks/auto-approve-allowed-commands.sh` (the path after chezmoi applies the dotfiles).
 
 ### Help
 
 ```bash
-./install --help
-./install <command> --help
+./install.sh --help
 ```
+
+## Chezmoi Integration
+
+The installer **automatically detects** if chezmoi manages your `~/.claude` directory:
+
+- Writes to chezmoi's source directory instead of `~/.claude` directly
+- Uses `executable_` prefix for hook files
+- Detects chezmoi-managed shell config files (`.bashrc`, `.zshrc`, etc.)
+- Prompts to run `chezmoi apply` at the end
+
+No special flags needed - it just works!
 
 ## What Gets Installed
 
@@ -118,18 +96,22 @@ The settings.json will still reference `$HOME/.claude/hooks/auto-approve-allowed
 |------|---------|
 | `~/.claude/settings.json` | Updated with shell config, hook config, and permissions |
 | `~/.claude/hooks/auto-approve-allowed-commands.sh` | The hook script that enables piped command auto-approval |
-
-(Paths change if using `--claude-dir`)
+| `~/.bashrc`, `~/.zshrc`, `~/.config/fish/config.fish` | Shell alias added (workaround for shell bug) |
 
 ## Safe Permissions Added
 
-The `permissions` command adds auto-approval for ~80 read-only commands:
+The installer adds auto-approval for 850+ permission entries covering 350+ commands:
 
-- **File inspection:** `ls`, `cat`, `head`, `tail`, `file`, `stat`, `wc`
-- **Search:** `find`, `fd`, `grep`, `rg`, `awk`, `sed`
-- **Text processing:** `sort`, `uniq`, `cut`, `tr`, `jq`
-- **Git (read-only):** `git status`, `git diff`, `git log`, `git branch`, `git fetch`
-- **System info:** `date`, `whoami`, `uname`, `env`, `ps`
+- **File & text:** `ls`, `cat`, `head`, `tail`, `file`, `stat`, `wc`, `find`, `fd`, `grep`, `rg`, `awk`, `sed`, `sort`, `uniq`, `cut`, `tr`, `jq`, `yq`
+- **Git:** `git status`, `git diff`, `git log`, `git branch`, `git fetch`, `git show`, `git blame`, etc. (read-only)
+- **GitHub CLI:** `gh pr list`, `gh issue view`, `gh repo view`, `gh run list`, etc. (read-only)
+- **System info:** `date`, `whoami`, `uname`, `env`, `ps`, `df`, `du`, `top`, `uptime`
+- **Languages:** `node`, `python`, `ruby`, `go`, `rust`, `java`, `php`, `elixir`, `haskell`, `scala`, `kotlin`, `lua`, `R`, etc. (version/info commands)
+- **Package managers:** `npm`, `yarn`, `pnpm`, `bun`, `pip`, `poetry`, `cargo`, `gem`, `bundle`, `composer`, `maven`, `gradle`, `brew`, `conda` (read-only)
+- **Cloud CLIs:** `aws`, `az`, `gcloud` (read-only: `list`, `describe`, `show`)
+- **DevOps:** `docker`, `kubectl`, `helm`, `terraform`, `ansible`, `vagrant`, `pulumi` (read-only)
+- **Databases:** `psql`, `mysql`, `sqlite3`, `mongo`, `redis-cli` (read-only)
+- **Editors/tools:** `code`, `vim`, `nvim`, `bat`, `delta`, `fzf`, `tmux` (read-only)
 
 See [src/lib/permissions.sh](src/lib/permissions.sh) for the full list.
 
@@ -144,6 +126,10 @@ See [src/lib/permissions.sh](src/lib/permissions.sh) for the full list.
 
 This means `ls -la | grep foo | head -5` gets auto-approved when you have `Bash(ls:*)`, `Bash(grep:*)`, and `Bash(head:*)` in your permissions.
 
+The hook reads permissions from:
+- **Global:** `~/.claude/settings.json`
+- **Project:** `.claude/settings.json` and `.claude/settings.local.json`
+
 ### Supported Shell Syntax
 
 The parser handles:
@@ -153,6 +139,7 @@ The parser handles:
 - Subshells: `(cmd1; cmd2) | cmd3`
 - Command substitution: `echo $(cmd1 | cmd2)`
 - `bash -c` / `sh -c`: recursively expanded
+- For/while loops: extracts inner commands
 
 ## Uninstall
 
@@ -160,7 +147,12 @@ The parser handles:
 # Remove the hook
 rm ~/.claude/hooks/auto-approve-allowed-commands.sh
 
-# Optionally, remove the hook config from settings.json
+# Remove the shell alias from your shell config files
+# Look for lines after "# Added by better-claude-code for shell alias"
+
+# Edit ~/.claude/settings.json to:
+# - Remove the hook config from .hooks.PreToolUse
+# - Remove any unwanted permissions from .permissions.allow
 # (or just delete ~/.claude/settings.json to reset everything)
 ```
 

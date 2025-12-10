@@ -2,24 +2,24 @@
 
 ## Summary
 
-- [ ] [1. Validate Homebrew installation prompt input](#1-validate-homebrew-installation-prompt-input)
-- [ ] [2. Categorize permissions into JSON files](#2-categorize-permissions-into-json-files)
-- [ ] [3. Interactive permission category selection](#3-interactive-permission-category-selection)
-- [ ] [4. Preserve existing settings.json content](#4-preserve-existing-settingsjson-content)
+- [x] [1. Validate Homebrew installation prompt input](#1-validate-homebrew-installation-prompt-input) - WON'T FIX (current `[Y/n]` behavior follows Unix conventions)
+- [x] [2. Categorize permissions into JSON files](#2-categorize-permissions-into-json-files) - WON'T FIX (single file approach chosen instead)
+- [x] [3. Interactive permission category selection](#3-interactive-permission-category-selection) - WON'T FIX (depends on #2)
+- [x] [4. Preserve existing settings.json content](#4-preserve-existing-settingsjson-content)
 - [ ] [5. Extensive security tests against original dotfiles](#5-extensive-security-tests-against-original-dotfiles) ⚠️ CRITICAL
 - [ ] [6. CI pipeline for tests and linting](#6-ci-pipeline-for-tests-and-linting)
 - [ ] [7. Automate installer generation in CI](#7-automate-installer-generation-in-ci)
-- [ ] [8. Should the installer have a `.sh` extension?](#8-should-the-installer-have-a-sh-extension)
+- [x] [8. Should the installer have a `.sh` extension?](#8-should-the-installer-have-a-sh-extension) - Yes, using `install.sh`
 - [ ] [9. Tests for complex command parsing edge cases](#9-tests-for-complex-command-parsing-edge-cases)
 - [ ] [10. Tests for string content not being parsed as commands](#10-tests-for-string-content-not-being-parsed-as-commands)
-- [ ] [11. Shell configuration with alias workaround](#11-shell-configuration-with-alias-workaround)
+- [x] [11. Shell configuration with alias workaround](#11-shell-configuration-with-alias-workaround)
 - [ ] [12. Dotfiles manager support for shell config modifications](#12-dotfiles-manager-support-for-shell-config-modifications)
 - [ ] [13. Redesign installer flow with customization options](#13-redesign-installer-flow-with-customization-options)
 - [ ] [14. Document and showcase hook capabilities](#14-document-and-showcase-hook-capabilities)
 - [ ] [15. Rebrand from "fix bugs" to "enhance behavior"](#15-rebrand-from-fix-bugs-to-enhance-behavior)
-- [ ] [16. Remove --hook-prefix flag after dotfiles manager support](#16-remove---hook-prefix-flag-after-dotfiles-manager-support)
-- [ ] [17. Default shell to bash instead of $SHELL](#17-default-shell-to-bash-instead-of-shell)
-- [ ] [18. Use relative hook path in settings.json](#18-use-relative-hook-path-in-settingsjson)
+- [x] [16. Remove --hook-prefix flag after dotfiles manager support](#16-remove---hook-prefix-flag-after-dotfiles-manager-support)
+- [x] [17. Default shell to bash instead of $SHELL](#17-default-shell-to-bash-instead-of-shell)
+- [x] [18. Use relative hook path in settings.json](#18-use-relative-hook-path-in-settingsjson) - Uses `$HOME` which Claude expands at runtime
 - [ ] [19. Test commands with colons](#19-test-commands-with-colons)
 
 ---

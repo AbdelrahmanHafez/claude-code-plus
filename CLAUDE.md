@@ -7,7 +7,7 @@ This file helps Claude Code understand the project structure and development wor
 Better Claude Code is an installer that enhances Claude Code CLI. It addresses two main issues:
 
 1. **Piped commands not auto-approved** ([#13340](https://github.com/anthropics/claude-code/issues/13340)) - Fixed via a PreToolUse hook
-2. **Custom shell not respected** ([#7490](https://github.com/anthropics/claude-code/issues/7490)) - Fixed via settings.json env config
+2. **Custom shell not respected** ([#7490](https://github.com/anthropics/claude-code/issues/7490)) - Fixed via settings.json env config + shell alias workaround
 
 ## Project Structure
 
@@ -16,18 +16,20 @@ better-claude/
 ├── install.sh           # Generated single-file installer (DO NOT EDIT DIRECTLY)
 ├── README.md            # User documentation
 ├── CLAUDE.md            # This file
+├── TODOS.md             # Internal development todos
 ├── test/
 │   ├── test_helper.bash # Common test helpers and assertions
 │   └── install.bats     # All installer tests
 └── src/
     ├── bashly.yml       # Bashly CLI configuration (flags, args)
-    ├── root_command.sh  # Main installer logic
+    ├── root_command.sh  # Main installer logic (interactive flow)
     └── lib/             # Shared helper functions
-        ├── colors.sh    # Terminal output helpers (info, success, error, etc.)
-        ├── deps.sh      # Dependency checking and installation
-        ├── settings.sh  # Claude settings.json manipulation + hook config
+        ├── colors.sh    # Terminal output helpers (info, success, error, cmd, etc.)
+        ├── deps.sh      # Dependency checking and installation (Homebrew, bash, jq, shfmt)
+        ├── settings.sh  # Claude settings.json manipulation + chezmoi detection
+        ├── shell_alias.sh # Shell alias configuration for bash/zsh/fish
         ├── hook_script.sh # Generates the auto-approve-allowed-commands.sh hook content
-        └── permissions.sh # Default safe Bash permissions list
+        └── permissions.sh # Default safe Bash permissions list (200+ commands)
 ```
 
 ## Development Workflow
@@ -37,9 +39,10 @@ better-claude/
 This project uses [bashly](https://bashly.dev) to generate a single executable from modular source files.
 
 ```bash
-# Generate the installer
-/opt/homebrew/lib/ruby/gems/3.4.0/bin/bashly generate
-# Or with Docker:
+# Generate the installer (recommended)
+bashly generate
+
+# Or with Docker
 docker run --rm -v "$PWD:/app" dannyben/bashly generate
 
 # Test the installer
@@ -52,16 +55,23 @@ docker run --rm -v "$PWD:/app" dannyben/bashly generate
 - **Step-down style**: `main()` at the top, helper functions below in order of abstraction
 - **Section comments**: Use `# --- Section Name ---` to group related functions
 - **Error handling**: Use `|| true` after arithmetic operations like `((count++))` to avoid exit code issues with `set -e`
-- **Private functions**: Prefix with `_` for functions not meant to be called externally
 
 ### Key Design Decisions
 
 1. **Single file output**: The `install.sh` script is self-contained for easy `curl | bash` distribution
-2. **Homebrew dependency**: We rely on Homebrew for macOS package management (prompts to install if missing)
-3. **Modern bash default**: Defaults to Homebrew's bash 4.4+ instead of macOS's ancient bash 3.2
-4. **Configurable paths**: `--claude-dir` flag allows installation to custom directories (for dotfiles managers)
-5. **Hook filename prefix**: `--hook-prefix` flag adds a prefix to the hook filename (e.g., `executable_` for chezmoi)
-6. **Separate file path vs settings path**: The hook file can have a prefix, but settings.json always references `$HOME/.claude/hooks/auto-approve-allowed-commands.sh` (the runtime path after dotfiles are applied)
+2. **Interactive by default**: Users choose "Recommended" or "Custom" installation mode
+3. **Non-interactive mode**: `-y` flag for scripting/automation
+4. **Homebrew dependency**: We rely on Homebrew for macOS package management (prompts to install if missing)
+5. **Modern bash default**: Defaults to Homebrew's bash 4.4+ instead of macOS's ancient bash 3.2
+6. **Auto-detect chezmoi**: Automatically detects if `~/.claude` is managed by chezmoi and adjusts paths/prefixes accordingly
+7. **Shell alias workaround**: Adds `claude` function to shell configs that sets `SHELL` env var (workaround until upstream bug is fixed)
+
+### CLI Flags
+
+The installer has only two flags (no subcommands):
+
+- `--shell, -s <path>` - Path to shell (default: modern bash from Homebrew)
+- `--yes, -y` - Non-interactive mode, accept all defaults
 
 ### Testing
 
@@ -113,6 +123,31 @@ DEFAULT_PERMISSIONS=(
 ```
 
 Then regenerate with bashly.
+
+## Key Implementation Details
+
+### Chezmoi Integration (`src/lib/settings.sh`, `src/lib/shell_alias.sh`)
+
+The installer auto-detects chezmoi:
+- Checks if `chezmoi source-path ~/.claude` succeeds
+- If managed: writes to chezmoi source dir, uses `executable_` prefix for hooks
+- Tracks modified chezmoi files in `CHEZMOI_MODIFIED_FILES` array
+- Prompts user to run `chezmoi apply` at the end
+
+### Shell Alias Workaround (`src/lib/shell_alias.sh`)
+
+Until Claude Code fixes issue #7490, we add a shell function/alias:
+- Bash/Zsh: `claude() { SHELL=/path/to/bash command claude "$@" }`
+- Fish: `function claude; SHELL=/path/to/bash command claude $argv; end`
+- Added to all existing shell config files (.bashrc, .zshrc, config.fish)
+- Marked with `# Added by better-claude-code for shell alias` for identification
+
+### Hook Configuration (`src/lib/settings.sh`)
+
+The hook is added to settings.json under `.hooks.PreToolUse`:
+- Merges with existing hooks (doesn't overwrite)
+- Uses `$HOME/.claude/hooks/...` path (expanded at runtime by Claude Code)
+- Checks for existing hook before adding
 
 ## Dependencies
 
