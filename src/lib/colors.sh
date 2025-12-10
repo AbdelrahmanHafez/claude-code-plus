@@ -38,5 +38,10 @@ step() {
   printf "\n${BOLD}→ %s${NC}\n" "$*"
 }
 
+# Format a command for display (cyan/bold)
+cmd() {
+  printf "${BOLD}${BLUE}%s${NC}" "$1"
+}
+
 # Initialize colors on source
 setup_colors

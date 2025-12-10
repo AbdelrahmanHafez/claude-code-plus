@@ -5,6 +5,8 @@
 ALIAS_MARKER="# Added by better-claude-code for shell alias"
 
 # Note: CHEZMOI_MODIFIED_FILES is defined in settings.sh
+# TARGET_FILE is set by get_config_target() to avoid subshell issues
+TARGET_FILE=""
 
 # --- Public API ---
 
@@ -47,8 +49,9 @@ configure_alias() {
   local shell_path="$2"
   local config_file="$3"
 
-  local target_file
-  target_file=$(get_config_target "$config_file")
+  # Sets TARGET_FILE global (avoids subshell so CHEZMOI_MODIFIED_FILES persists)
+  get_config_target "$config_file"
+  local target_file="$TARGET_FILE"
 
   if alias_already_configured "$target_file"; then
     info "${shell_type^} alias already configured"
@@ -91,6 +94,7 @@ EOF
 # --- Helpers ---
 
 # Get the target file to write to (handles chezmoi)
+# Sets TARGET_FILE global instead of echoing (to avoid subshell issues with array tracking)
 get_config_target() {
   local config_file="$1"
   local relative_path="${config_file#$HOME/}"
@@ -102,12 +106,12 @@ get_config_target() {
     if [[ -n "$chezmoi_source" ]]; then
       # Track that we modified a chezmoi-managed file
       CHEZMOI_MODIFIED_FILES+=("$config_file")
-      echo "$chezmoi_source"
+      TARGET_FILE="$chezmoi_source"
       return
     fi
   fi
 
-  echo "$config_file"
+  TARGET_FILE="$config_file"
 }
 
 is_file_managed_by_chezmoi() {

@@ -88,15 +88,14 @@ Each test creates a fresh temp directory (`$TEST_DIR`) and cleans it up after, s
 
 #### Manual Testing
 
+Use `CLAUDE_DIR_OVERRIDE` environment variable to test against a temp directory instead of your real `~/.claude`:
+
 ```bash
 # Test with custom directory (ALWAYS use /tmp for testing)
-./install.sh --claude-dir /tmp/test-claude
-
-# Test with chezmoi-style prefix
-./install.sh -d /tmp/test-claude -p executable_
+CLAUDE_DIR_OVERRIDE=/tmp/test-claude ./install.sh -y
 
 # Test with custom shell
-./install.sh -d /tmp/test-claude --shell /bin/zsh
+CLAUDE_DIR_OVERRIDE=/tmp/test-claude ./install.sh -y --shell /bin/zsh
 
 # Clean up after testing
 rm -rf /tmp/test-claude

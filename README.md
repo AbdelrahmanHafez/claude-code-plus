@@ -26,9 +26,9 @@ cd better-claude-code
 
 ### 2. Custom Shell Not Respected (Issue [#7490](https://github.com/anthropics/claude-code/issues/7490))
 
-**Problem:** Claude Code ignores the `$SHELL` environment variable and always uses the system default shell (`/bin/zsh` on macOS). This breaks PATH, aliases, and environment for Fish/Bash users.
+**Problem:** Claude Code ignores the `$SHELL` environment variable and always uses the system default shell (`/bin/zsh` on macOS) when executing Bash tool commands. This breaks PATH, aliases, and environment for Fish/Bash users.
 
-**Solution:** Sets the `SHELL` environment variable in Claude's settings, which Claude Code does respect.
+**Solution:** Sets the `SHELL` environment variable in Claude's settings, which tells Claude Code which shell to use for running commands.
 
 ## Requirements
 
@@ -36,7 +36,7 @@ cd better-claude-code
 
 The installer will automatically install these dependencies if missing (via Homebrew):
 - **Homebrew** itself (prompts to install if missing)
-- `bash` 4.4+ (macOS ships with 3.2)
+- `bash` 4.4+ (required by the hook script; macOS ships with 3.2)
 - `jq` (JSON processor)
 - `shfmt` (shell parser)
 
@@ -50,7 +50,7 @@ The installer will automatically install these dependencies if missing (via Home
 
 This will:
 1. Check and install dependencies (including Homebrew if needed)
-2. Configure your preferred shell
+2. Configure Claude Code to use your preferred shell for running commands
 3. Install the auto-approve-allowed-commands hook
 4. Add safe command permissions
 
@@ -60,7 +60,7 @@ This will:
 # Check/install dependencies only
 ./install dependencies
 
-# Configure shell (auto-detects from $SHELL)
+# Configure which shell Claude Code uses for commands (auto-detects from $SHELL)
 ./install shell
 
 # Or specify a shell explicitly

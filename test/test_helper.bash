@@ -22,7 +22,7 @@ get_project_root() {
 run_install() {
   local project_root
   project_root=$(get_project_root)
-  run "$project_root/install.sh" -d "$TEST_DIR" "$@"
+  CLAUDE_DIR_OVERRIDE="$TEST_DIR" run "$project_root/install.sh" "$@"
 }
 
 # Run the installer and assert success

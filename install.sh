@@ -13,26 +13,76 @@ fi
 root_command() {
   # src/root_command.sh
   main() {
-    local claude_dir="${args['--claude-dir']:-}"
-    local hook_prefix="${args['--hook-prefix']:-}"
+    local non_interactive="${args['--yes']:-}"
 
-    init_claude_paths "$claude_dir" "$hook_prefix"
+    init_claude_paths
 
     print_banner
-    print_overview
 
     step_deps
+
+    local mode="recommended"
+    if [[ -z "$non_interactive" ]]; then
+      mode=$(prompt_install_mode)
+    fi
+
+    if [[ "$mode" == "recommended" ]]; then
+      run_recommended_install
+    else
+      run_custom_install
+    fi
+
+    print_completion
+  }
+
+  # --- Install modes ---
+
+  run_recommended_install() {
+    info "Installing with recommended settings..."
+    echo ""
+
     step_shell
     step_hook
     step_permissions
+  }
 
-    print_completion
+  run_custom_install() {
+    info "Custom installation..."
+    echo ""
+
+    # Shell selection
+    local shell_path="${args['--shell']:-}"
+    if [[ -z "$shell_path" ]]; then
+      shell_path=$(find_modern_bash)
+    fi
+    local shell_name
+    shell_name=$(basename "$shell_path")
+
+    if prompt_yes_no "Configure Claude Code to run commands in $shell_name?" "Y"; then
+      step_shell
+    else
+      info "Skipping shell configuration"
+    fi
+
+    # Hook installation
+    if prompt_yes_no "Auto-approve piped commands that match allowed patterns?" "Y"; then
+      step_hook
+    else
+      info "Skipping hook installation"
+    fi
+
+    # Permissions
+    if prompt_yes_no "Pre-approve common safe commands (ls, git status, grep, etc.)?" "Y"; then
+      step_permissions
+    else
+      info "Skipping permissions"
+    fi
   }
 
   # --- Steps ---
 
   step_deps() {
-    step "Step 1/4: Dependencies"
+    step "Checking dependencies"
 
     if check_all_deps; then
       success "All dependencies present"
@@ -40,6 +90,13 @@ root_command() {
     fi
 
     warn "Some dependencies missing"
+
+    # Non-interactive mode: auto-install
+    if [[ -n "${args['--yes']:-}" ]]; then
+      install_missing_deps || exit 1
+      return
+    fi
+
     read -p "Install missing dependencies? [Y/n] " -n 1 -r
     echo ""
 
@@ -52,7 +109,7 @@ root_command() {
   }
 
   step_shell() {
-    step "Step 2/4: Shell configuration"
+    step "Configuring shell for Claude Code commands"
 
     local shell_path="${args['--shell']:-}"
 
@@ -75,21 +132,19 @@ root_command() {
       exit 1
     fi
 
-    local current_shell
-    current_shell=$(get_setting '.env.SHELL')
-
-    if [[ "$current_shell" == "$shell_path" ]]; then
-      success "Shell already set to $shell_name"
-      return 0
-    fi
-
     info "Configuring Claude to use $shell_name ($shell_path)"
+
+    # Set env.SHELL in settings.json (for when Claude fixes the bug)
     set_setting '.env.SHELL' "\"$shell_path\""
-    success "Shell configured"
+
+    # Add shell alias to shell config files (workaround until bug is fixed)
+    configure_shell_alias "$shell_path"
+
+    success "Claude Code will now run commands in $shell_name"
   }
 
   step_hook() {
-    step "Step 3/4: Installing allow-piped hook"
+    step "Installing hook to auto-approve allowed commands"
 
     local hook_file
     hook_file=$(get_hook_filepath)
@@ -100,6 +155,7 @@ root_command() {
       info "Hook already exists, updating..."
     fi
 
+    # shellcheck disable=SC2153
     generate_hook_script "$CLAUDE_DIR" > "$hook_file"
     chmod +x "$hook_file"
     success "Hook installed"
@@ -108,7 +164,7 @@ root_command() {
   }
 
   step_permissions() {
-    step "Step 4/4: Adding safe permissions"
+    step "Adding safe permissions"
 
     local added=0
 
@@ -136,13 +192,54 @@ root_command() {
     echo ""
   }
 
-  print_overview() {
-    info "This installer will:"
-    echo "  1. Check/install dependencies (bash 4.4+, shfmt, jq)"
-    echo "  2. Configure your preferred shell"
-    echo "  3. Install the allow-piped hook"
-    echo "  4. Add safe command permissions"
+  # --- Prompts ---
+
+  prompt_install_mode() {
+    # Print menu to /dev/tty so it's not captured by command substitution
+    printf '\n' > /dev/tty
+    printf "${BOLD}Choose installation mode:${NC}\n" > /dev/tty
+    printf '\n' > /dev/tty
+    printf "  ${GREEN}[1]${NC} ${BOLD}Recommended${NC} - Install everything with sensible defaults\n" > /dev/tty
+    printf "      • Claude Code runs commands in modern bash (4.4+)\n" > /dev/tty
+    printf "      • Auto-approve hook for compound commands\n" > /dev/tty
+    printf "      • Safe read-only command permissions\n" > /dev/tty
+    printf '\n' > /dev/tty
+    printf "  ${BLUE}[2]${NC} ${BOLD}Custom${NC} - Choose what to install\n" > /dev/tty
+    printf '\n' > /dev/tty
+
+    local choice
+    while true; do
+      read -p "Enter choice [1/2]: " -n 1 -r choice
+      printf '\n' > /dev/tty
+      case "$choice" in
+        1) echo "recommended"; return ;;
+        2) echo "custom"; return ;;
+        "") echo "recommended"; return ;;  # Default to recommended
+        *) warn "Please enter 1 or 2" ;;
+      esac
+    done
+  }
+
+  prompt_yes_no() {
+    local prompt="$1"
+    local default="${2:-Y}"  # Y or N
+
+    local hint
+    if [[ "$default" == "Y" ]]; then
+      hint="[Y/n]"
+    else
+      hint="[y/N]"
+    fi
+
+    local reply
+    read -p "$prompt $hint " -n 1 -r reply
     echo ""
+
+    if [[ -z "$reply" ]]; then
+      reply="$default"
+    fi
+
+    [[ "$reply" =~ ^[Yy]$ ]]
   }
 
   print_completion() {
@@ -153,10 +250,34 @@ root_command() {
     echo ""
     success "Better Claude Code is now configured!"
     echo ""
-    info "Changes made to: $CLAUDE_SETTINGS"
-    info "Hook installed to: $(get_hook_filepath)"
+    info "Settings file: $CLAUDE_SETTINGS"
+    if [[ -f "$(get_hook_filepath)" ]]; then
+      info "Hook file: $(get_hook_filepath)"
+    fi
     echo ""
-    info "Start a new Claude Code session to apply changes."
+    # Prompt to apply chezmoi if any managed files were modified
+    if has_chezmoi_modifications; then
+      echo ""
+      # Replace $HOME with ~ for display
+      local chezmoi_targets="${CHEZMOI_MODIFIED_FILES[*]}"
+      chezmoi_targets="${chezmoi_targets//$HOME/\~}"
+      local chezmoi_cmd="chezmoi apply $chezmoi_targets"
+      if prompt_yes_no "Run $(cmd "$chezmoi_cmd") now?" "Y"; then
+        # shellcheck disable=SC2086
+        chezmoi apply $chezmoi_targets
+        success "Chezmoi applied"
+      else
+        warn "Remember to run $(cmd "$chezmoi_cmd") before using Claude Code"
+      fi
+    fi
+    echo ""
+    local source_cmd
+    case "$(basename "$SHELL")" in
+      fish) source_cmd="source ~/.config/fish/config.fish" ;;
+      zsh)  source_cmd="source ~/.zshrc" ;;
+      *)    source_cmd="source ~/.bashrc" ;;
+    esac
+    info "Open a new terminal or run $(cmd "$source_cmd"), then run $(cmd "claude") to start."
   }
 
   main
@@ -185,18 +306,13 @@ install.sh_usage() {
 
     # :command.usage_flags
     # :flag.usage
-    printf "  %s\n" "--claude-dir, -d DIR"
-    printf "    Path to .claude directory (default: ~/.claude)\n"
-    echo
-
-    # :flag.usage
-    printf "  %s\n" "--hook-prefix, -p PREFIX"
-    printf "    Prefix for hook filename (e.g., 'executable_' for chezmoi)\n"
-    echo
-
-    # :flag.usage
     printf "  %s\n" "--shell, -s SHELL_PATH"
     printf "    Path to shell (default: modern bash)\n"
+    echo
+
+    # :flag.usage
+    printf "  %s\n" "--yes, -y"
+    printf "    Non-interactive mode, accept all defaults\n"
     echo
 
     # :command.usage_fixed_flags
@@ -315,6 +431,11 @@ error() {
 
 step() {
   printf "\n${BOLD}→ %s${NC}\n" "$*"
+}
+
+# Format a command for display (cyan/bold)
+cmd() {
+  printf "${BOLD}${BLUE}%s${NC}" "$1"
 }
 
 # Initialize colors on source
@@ -521,7 +642,7 @@ command_exists() {
 }
 
 # src/lib/hook_script.sh
-# This file contains a function that generates the allow-piped.sh hook script
+# This file contains a function that generates the auto-approve-allowed-commands.sh hook script
 # The script is generated with the correct CLAUDE_DIR path baked in
 
 generate_hook_script() {
@@ -529,7 +650,7 @@ generate_hook_script() {
 
   cat << HOOK_EOF
 #!/usr/bin/env bash
-# allow-piped.sh - Hook to allow piped commands where ALL components are in allowed Bash permissions.
+# auto-approve-allowed-commands.sh - Hook to auto-approve compound commands where ALL components match allowed Bash permissions.
 # Claude Code's prefix matching doesn't handle pipes - this hook fixes that.
 #
 # Dynamically reads allowed commands from:
@@ -844,117 +965,887 @@ HOOK_EOF
 
 # src/lib/permissions.sh
 # Default safe Bash permissions to add
-
 # These are read-only or safe commands that Claude can run without user approval
+
 # shellcheck disable=SC2034  # Used by permissions_command.sh and all_command.sh
 DEFAULT_PERMISSIONS=(
-  # Basic file operations (read-only)
-  "Bash(cat:*)"
-  "Bash(head:*)"
-  "Bash(tail:*)"
-  "Bash(less:*)"
-  "Bash(more:*)"
-
-  # File info
-  "Bash(ls:*)"
-  "Bash(file:*)"
-  "Bash(stat:*)"
-  "Bash(wc:*)"
-  "Bash(du:*)"
-  "Bash(df:*)"
-
-  # Search and find
-  "Bash(find:*)"
-  "Bash(fd:*)"
-  "Bash(grep:*)"
-  "Bash(rg:*)"
+  "Bash(./gradlew --version:*)"
+  "Bash(./gradlew dependencies:*)"
+  "Bash(./gradlew tasks:*)"
+  "Bash(R --version:*)"
+  "Bash(Rscript --version:*)"
+  "Bash(actionlint --version:*)"
+  "Bash(age --version:*)"
+  "Bash(ansible --version:*)"
+  "Bash(ansible-galaxy list:*)"
+  "Bash(ansible-inventory --list:*)"
+  "Bash(ansible-playbook --version:*)"
+  "Bash(ant -diagnostics:*)"
+  "Bash(ant -version:*)"
+  "Bash(apropos:*)"
+  "Bash(ar --version:*)"
+  "Bash(arp:*)"
+  "Bash(asciidoctor --version:*)"
+  "Bash(asdf --version:*)"
+  "Bash(asdf current:*)"
+  "Bash(asdf list:*)"
+  "Bash(asdf plugin list:*)"
+  "Bash(atuin --version:*)"
+  "Bash(atuin history stats:*)"
   "Bash(awk:*)"
-  "Bash(sed:*)"
-
-  # Text processing
-  "Bash(sort:*)"
-  "Bash(uniq:*)"
-  "Bash(cut:*)"
-  "Bash(tr:*)"
-  "Bash(column:*)"
-  "Bash(fold:*)"
-  "Bash(nl:*)"
-  "Bash(paste:*)"
-  "Bash(rev:*)"
-  "Bash(tee:*)"
-
-  # Path utilities
-  "Bash(pwd:*)"
-  "Bash(dirname:*)"
+  "Bash(aws --version:*)"
+  "Bash(aws cloudformation describe-stacks:*)"
+  "Bash(aws cloudformation list-stacks:*)"
+  "Bash(aws configure get:*)"
+  "Bash(aws configure list:*)"
+  "Bash(aws dynamodb list-tables:*)"
+  "Bash(aws ec2 describe-instances:*)"
+  "Bash(aws ec2 describe-security-groups:*)"
+  "Bash(aws ec2 describe-subnets:*)"
+  "Bash(aws ec2 describe-vpcs:*)"
+  "Bash(aws ecs describe-services:*)"
+  "Bash(aws ecs list-clusters:*)"
+  "Bash(aws ecs list-services:*)"
+  "Bash(aws eks describe-cluster:*)"
+  "Bash(aws eks list-clusters:*)"
+  "Bash(aws help:*)"
+  "Bash(aws iam get-user:*)"
+  "Bash(aws iam list-roles:*)"
+  "Bash(aws iam list-users:*)"
+  "Bash(aws lambda get-function:*)"
+  "Bash(aws lambda list-functions:*)"
+  "Bash(aws logs describe-log-groups:*)"
+  "Bash(aws logs describe-log-streams:*)"
+  "Bash(aws rds describe-db-instances:*)"
+  "Bash(aws s3 ls:*)"
+  "Bash(aws s3api list-buckets:*)"
+  "Bash(aws ssm describe-parameters:*)"
+  "Bash(aws ssm get-parameter:*)"
+  "Bash(aws sts get-caller-identity:*)"
+  "Bash(aws sts get-session-token:*)"
+  "Bash(az --version:*)"
+  "Bash(az account list:*)"
+  "Bash(az account show:*)"
+  "Bash(az acr list:*)"
+  "Bash(az ad user list:*)"
+  "Bash(az aks list:*)"
+  "Bash(az functionapp list:*)"
+  "Bash(az group list:*)"
+  "Bash(az group show:*)"
+  "Bash(az help:*)"
+  "Bash(az network vnet list:*)"
+  "Bash(az sql server list:*)"
+  "Bash(az storage account list:*)"
+  "Bash(az version:*)"
+  "Bash(az vm list:*)"
+  "Bash(az vm show:*)"
+  "Bash(az webapp list:*)"
+  "Bash(bandit --version:*)"
   "Bash(basename:*)"
-  "Bash(realpath:*)"
-  "Bash(readlink:*)"
-  "Bash(which:*)"
-  "Bash(type:*)"
-
-  # System info
-  "Bash(echo:*)"
-  "Bash(date:*)"
+  "Bash(bat --version:*)"
+  "Bash(bat:*)"
+  "Bash(biome --version:*)"
+  "Bash(black --version:*)"
+  "Bash(bottom --version:*)"
+  "Bash(brew --caskroom:*)"
+  "Bash(brew --cellar:*)"
+  "Bash(brew --prefix:*)"
+  "Bash(brew --version:*)"
+  "Bash(brew cat:*)"
+  "Bash(brew config:*)"
+  "Bash(brew deps:*)"
+  "Bash(brew desc:*)"
+  "Bash(brew doctor:*)"
+  "Bash(brew home:*)"
+  "Bash(brew info:*)"
+  "Bash(brew leaves:*)"
+  "Bash(brew list:*)"
+  "Bash(brew log:*)"
+  "Bash(brew outdated:*)"
+  "Bash(brew search:*)"
+  "Bash(brew tap-info:*)"
+  "Bash(brew upgrade:*)"
+  "Bash(brew uses:*)"
+  "Bash(brew:*)"
+  "Bash(broot --version:*)"
+  "Bash(btm --version:*)"
+  "Bash(buf --version:*)"
+  "Bash(bun --version:*)"
+  "Bash(bun -v:*)"
+  "Bash(bun pm bin:*)"
+  "Bash(bun pm cache:*)"
+  "Bash(bun pm ls:*)"
+  "Bash(bundle --version:*)"
+  "Bash(bundle check:*)"
+  "Bash(bundle config list:*)"
+  "Bash(bundle info:*)"
+  "Bash(bundle list:*)"
+  "Bash(bundle outdated:*)"
+  "Bash(bundle show:*)"
+  "Bash(bundle version:*)"
+  "Bash(bundler --version:*)"
+  "Bash(bw --version:*)"
+  "Bash(bw status:*)"
+  "Bash(cabal --version:*)"
   "Bash(cal:*)"
-  "Bash(uname:*)"
-  "Bash(hostname:*)"
-  "Bash(whoami:*)"
-  "Bash(id:*)"
+  "Bash(cargo --version:*)"
+  "Bash(cargo -V:*)"
+  "Bash(cargo check:*)"
+  "Bash(cargo doc:*)"
+  "Bash(cargo help:*)"
+  "Bash(cargo info:*)"
+  "Bash(cargo locate-project:*)"
+  "Bash(cargo metadata:*)"
+  "Bash(cargo pkgid:*)"
+  "Bash(cargo read-manifest:*)"
+  "Bash(cargo search:*)"
+  "Bash(cargo tree:*)"
+  "Bash(cargo verify-project:*)"
+  "Bash(cassandra -v:*)"
+  "Bash(cat:*)"
+  "Bash(cd:*)"
+  "Bash(chezmoi apply ~/.claude:*)"
+  "Bash(chezmoi apply ~/bin:*)"
+  "Bash(chezmoi cat-config:*)"
+  "Bash(chezmoi data:*)"
+  "Bash(chezmoi diff:*)"
+  "Bash(chezmoi managed:*)"
+  "Bash(chezmoi source-path:*)"
+  "Bash(chezmoi status:*)"
+  "Bash(clang --version:*)"
+  "Bash(clang++ --version:*)"
+  "Bash(clippy-driver --version:*)"
+  "Bash(cloc --version:*)"
+  "Bash(cloc:*)"
+  "Bash(clojure --version:*)"
+  "Bash(cmake --version:*)"
+  "Bash(code --list-extensions:*)"
+  "Bash(code --version:*)"
+  "Bash(codesign -d:*)"
+  "Bash(codesign -v:*)"
+  "Bash(column:*)"
+  "Bash(commitlint --version:*)"
+  "Bash(composer --version:*)"
+  "Bash(composer info:*)"
+  "Bash(composer show:*)"
+  "Bash(conda --version:*)"
+  "Bash(conda config --show:*)"
+  "Bash(conda env list:*)"
+  "Bash(conda info:*)"
+  "Bash(conda list:*)"
+  "Bash(conda search:*)"
+  "Bash(cqlsh --version:*)"
+  "Bash(cspell --version:*)"
+  "Bash(csrutil status:*)"
+  "Bash(curl --head:*)"
+  "Bash(curl --version:*)"
+  "Bash(curl -I:*)"
+  "Bash(curl -v:*)"
+  "Bash(cursor --version:*)"
+  "Bash(cut:*)"
+  "Bash(date:*)"
+  "Bash(defaults read:*)"
+  "Bash(delta --version:*)"
+  "Bash(delta:*)"
+  "Bash(deno --version:*)"
+  "Bash(deno check:*)"
+  "Bash(deno doc:*)"
+  "Bash(deno info:*)"
+  "Bash(df:*)"
+  "Bash(diff:*)"
+  "Bash(dig:*)"
+  "Bash(direnv --version:*)"
+  "Bash(direnv status:*)"
+  "Bash(dirname:*)"
+  "Bash(diskutil info:*)"
+  "Bash(diskutil list:*)"
+  "Bash(ditto --version:*)"
+  "Bash(docker buildx inspect:*)"
+  "Bash(docker buildx ls:*)"
+  "Bash(docker compose config:*)"
+  "Bash(docker compose images:*)"
+  "Bash(docker compose logs:*)"
+  "Bash(docker compose ps:*)"
+  "Bash(docker compose top:*)"
+  "Bash(docker compose version:*)"
+  "Bash(docker config inspect:*)"
+  "Bash(docker config ls:*)"
+  "Bash(docker container inspect:*)"
+  "Bash(docker container ls:*)"
+  "Bash(docker context inspect:*)"
+  "Bash(docker context ls:*)"
+  "Bash(docker diff:*)"
+  "Bash(docker events:*)"
+  "Bash(docker history:*)"
+  "Bash(docker image inspect:*)"
+  "Bash(docker image ls:*)"
+  "Bash(docker images:*)"
+  "Bash(docker info:*)"
+  "Bash(docker inspect:*)"
+  "Bash(docker logs:*)"
+  "Bash(docker manifest inspect:*)"
+  "Bash(docker network inspect:*)"
+  "Bash(docker network ls:*)"
+  "Bash(docker node inspect:*)"
+  "Bash(docker node ls:*)"
+  "Bash(docker plugin ls:*)"
+  "Bash(docker port:*)"
+  "Bash(docker ps:*)"
+  "Bash(docker search:*)"
+  "Bash(docker secret ls:*)"
+  "Bash(docker service inspect:*)"
+  "Bash(docker service logs:*)"
+  "Bash(docker service ls:*)"
+  "Bash(docker stack ls:*)"
+  "Bash(docker stack ps:*)"
+  "Bash(docker stack services:*)"
+  "Bash(docker stats:*)"
+  "Bash(docker system df:*)"
+  "Bash(docker system info:*)"
+  "Bash(docker top:*)"
+  "Bash(docker version:*)"
+  "Bash(docker volume inspect:*)"
+  "Bash(docker volume ls:*)"
+  "Bash(docker-compose config:*)"
+  "Bash(docker-compose images:*)"
+  "Bash(docker-compose logs:*)"
+  "Bash(docker-compose ps:*)"
+  "Bash(docker-compose top:*)"
+  "Bash(docker-compose version:*)"
+  "Bash(dotnet --info:*)"
+  "Bash(dotnet --list-runtimes:*)"
+  "Bash(dotnet --list-sdks:*)"
+  "Bash(dotnet --version:*)"
+  "Bash(du:*)"
+  "Bash(duf --version:*)"
+  "Bash(duf:*)"
+  "Bash(dune --version:*)"
+  "Bash(dust --version:*)"
+  "Bash(dust:*)"
+  "Bash(echo:*)"
+  "Bash(elasticdump --version:*)"
+  "Bash(elixir --version:*)"
+  "Bash(elixirc --version:*)"
+  "Bash(emacs --version:*)"
+  "Bash(entr --version:*)"
   "Bash(env:*)"
-  "Bash(printenv:*)"
-  "Bash(locale:*)"
-  "Bash(uptime:*)"
-
-  # Git (read-only operations)
-  "Bash(git status:*)"
-  "Bash(git diff:*)"
-  "Bash(git log:*)"
-  "Bash(git show:*)"
-  "Bash(git branch:*)"
-  "Bash(git tag:*)"
-  "Bash(git remote:*)"
-  "Bash(git ls-files:*)"
-  "Bash(git ls-tree:*)"
+  "Bash(erl -version:*)"
+  "Bash(eslint --version:*)"
+  "Bash(eval-ts-to-json:*)"
+  "Bash(exa --version:*)"
+  "Bash(exa:*)"
+  "Bash(expr:*)"
+  "Bash(eza --version:*)"
+  "Bash(eza:*)"
+  "Bash(fd:*)"
+  "Bash(file:*)"
+  "Bash(find:*)"
+  "Bash(flake8 --version:*)"
+  "Bash(fnm --version:*)"
+  "Bash(fnm current:*)"
+  "Bash(fnm list:*)"
+  "Bash(fold:*)"
+  "Bash(free:*)"
+  "Bash(fswatch --version:*)"
+  "Bash(fzf --version:*)"
+  "Bash(fzf:*)"
+  "Bash(g++ --version:*)"
+  "Bash(gcc --version:*)"
+  "Bash(gcloud --version:*)"
+  "Bash(gcloud auth list:*)"
+  "Bash(gcloud compute instances describe:*)"
+  "Bash(gcloud compute instances list:*)"
+  "Bash(gcloud compute regions list:*)"
+  "Bash(gcloud compute zones list:*)"
+  "Bash(gcloud config get:*)"
+  "Bash(gcloud config list:*)"
+  "Bash(gcloud container clusters describe:*)"
+  "Bash(gcloud container clusters list:*)"
+  "Bash(gcloud functions list:*)"
+  "Bash(gcloud help:*)"
+  "Bash(gcloud iam service-accounts list:*)"
+  "Bash(gcloud projects describe:*)"
+  "Bash(gcloud projects list:*)"
+  "Bash(gcloud run services list:*)"
+  "Bash(gcloud sql instances list:*)"
+  "Bash(gcloud storage ls:*)"
+  "Bash(gcloud version:*)"
+  "Bash(gdb --version:*)"
+  "Bash(gem --version:*)"
+  "Bash(gem -v:*)"
+  "Bash(gem contents:*)"
+  "Bash(gem dependency:*)"
+  "Bash(gem environment:*)"
+  "Bash(gem help:*)"
+  "Bash(gem info:*)"
+  "Bash(gem list:*)"
+  "Bash(gem query:*)"
+  "Bash(gem search:*)"
+  "Bash(gem spec:*)"
+  "Bash(gem specification:*)"
+  "Bash(gem which:*)"
+  "Bash(getconf:*)"
+  "Bash(gh --version:*)"
+  "Bash(gh api --method GET:*)"
+  "Bash(gh api -X GET:*)"
+  "Bash(gh api /:*)"
+  "Bash(gh api repos:*)"
+  "Bash(gh api search/code:*)"
+  "Bash(gh auth status:*)"
+  "Bash(gh config get:*)"
+  "Bash(gh config list:*)"
+  "Bash(gh extension list:*)"
+  "Bash(gh gist list:*)"
+  "Bash(gh gist view:*)"
+  "Bash(gh help:*)"
+  "Bash(gh issue list:*)"
+  "Bash(gh issue status:*)"
+  "Bash(gh issue view:*)"
+  "Bash(gh label list:*)"
+  "Bash(gh pr checks:*)"
+  "Bash(gh pr diff:*)"
+  "Bash(gh pr list:*)"
+  "Bash(gh pr status:*)"
+  "Bash(gh pr view:*)"
+  "Bash(gh release list:*)"
+  "Bash(gh release view:*)"
+  "Bash(gh repo clone:*)"
+  "Bash(gh repo list:*)"
+  "Bash(gh repo view:*)"
+  "Bash(gh run list:*)"
+  "Bash(gh run view:*)"
+  "Bash(gh search:*)"
+  "Bash(gh secret list:*)"
+  "Bash(gh status:*)"
+  "Bash(gh variable list:*)"
+  "Bash(gh workflow list:*)"
+  "Bash(gh workflow view:*)"
+  "Bash(ghc --version:*)"
+  "Bash(ghci --version:*)"
   "Bash(git blame:*)"
-  "Bash(git rev-parse:*)"
-  "Bash(git rev-list:*)"
-  "Bash(git describe:*)"
+  "Bash(git branch:*)"
+  "Bash(git cat-file:*)"
+  "Bash(git cherry:*)"
   "Bash(git config --get:*)"
   "Bash(git config --list:*)"
-  "Bash(git stash list:*)"
+  "Bash(git count-objects:*)"
+  "Bash(git describe:*)"
+  "Bash(git diff:*)"
   "Bash(git fetch:*)"
-
-  # JSON/data processing
+  "Bash(git for-each-ref:*)"
+  "Bash(git fsck:*)"
+  "Bash(git log:*)"
+  "Bash(git ls-files:*)"
+  "Bash(git ls-remote:*)"
+  "Bash(git ls-tree:*)"
+  "Bash(git merge-base:*)"
+  "Bash(git name-rev:*)"
+  "Bash(git notes show:*)"
+  "Bash(git reflog:*)"
+  "Bash(git remote:*)"
+  "Bash(git rev-list:*)"
+  "Bash(git rev-parse:*)"
+  "Bash(git shortlog:*)"
+  "Bash(git show-branch:*)"
+  "Bash(git show-ref:*)"
+  "Bash(git show:*)"
+  "Bash(git stash list:*)"
+  "Bash(git stash show:*)"
+  "Bash(git status:*)"
+  "Bash(git symbolic-ref:*)"
+  "Bash(git tag:*)"
+  "Bash(git verify-commit:*)"
+  "Bash(git verify-tag:*)"
+  "Bash(git whatchanged:*)"
+  "Bash(glow --version:*)"
+  "Bash(glow:*)"
+  "Bash(go --version:*)"
+  "Bash(go doc:*)"
+  "Bash(go env:*)"
+  "Bash(go help:*)"
+  "Bash(go list:*)"
+  "Bash(go mod download -json:*)"
+  "Bash(go mod graph:*)"
+  "Bash(go mod verify:*)"
+  "Bash(go mod why:*)"
+  "Bash(go tool:*)"
+  "Bash(go version:*)"
+  "Bash(gofmt -d:*)"
+  "Bash(goimports -d:*)"
+  "Bash(gpg --list-keys:*)"
+  "Bash(gpg --list-secret-keys:*)"
+  "Bash(gpg --version:*)"
+  "Bash(gradle --version:*)"
+  "Bash(gradle -v:*)"
+  "Bash(gradle dependencies:*)"
+  "Bash(gradle help:*)"
+  "Bash(gradle projects:*)"
+  "Bash(gradle properties:*)"
+  "Bash(gradle tasks:*)"
+  "Bash(gradlew --version:*)"
+  "Bash(grep:*)"
+  "Bash(grpcurl --version:*)"
+  "Bash(hadolint --version:*)"
+  "Bash(haskell --version:*)"
+  "Bash(hdiutil info:*)"
+  "Bash(head:*)"
+  "Bash(helix --version:*)"
+  "Bash(helm --version:*)"
+  "Bash(helm dependency list:*)"
+  "Bash(helm env:*)"
+  "Bash(helm get:*)"
+  "Bash(helm history:*)"
+  "Bash(helm list:*)"
+  "Bash(helm ls:*)"
+  "Bash(helm repo list:*)"
+  "Bash(helm search:*)"
+  "Bash(helm show:*)"
+  "Bash(helm status:*)"
+  "Bash(helm template:*)"
+  "Bash(helm version:*)"
+  "Bash(hexdump:*)"
+  "Bash(host:*)"
+  "Bash(hostname:*)"
+  "Bash(htmlq --version:*)"
+  "Bash(http --version:*)"
+  "Bash(https --version:*)"
+  "Bash(hx --version:*)"
+  "Bash(hyperfine --version:*)"
+  "Bash(hyperfine:*)"
+  "Bash(id:*)"
+  "Bash(iex --version:*)"
+  "Bash(ifconfig:*)"
+  "Bash(influx version:*)"
+  "Bash(info:*)"
+  "Bash(ioreg -l:*)"
+  "Bash(ioreg:*)"
+  "Bash(ip addr:*)"
+  "Bash(ip link:*)"
+  "Bash(ip route:*)"
+  "Bash(isort --version:*)"
+  "Bash(java --version:*)"
+  "Bash(java -version:*)"
+  "Bash(javac --version:*)"
+  "Bash(javac -version:*)"
+  "Bash(jenv version:*)"
+  "Bash(jenv versions:*)"
+  "Bash(jq --version:*)"
   "Bash(jq:*)"
-
-  # Checksums
+  "Bash(jsonlint --version:*)"
+  "Bash(julia --version:*)"
+  "Bash(just --list:*)"
+  "Bash(just --version:*)"
+  "Bash(k9s version:*)"
+  "Bash(keychain --version:*)"
+  "Bash(kind get clusters:*)"
+  "Bash(kind get nodes:*)"
+  "Bash(kind version:*)"
+  "Bash(kotlin -version:*)"
+  "Bash(kotlinc -version:*)"
+  "Bash(kubectl api-resources:*)"
+  "Bash(kubectl api-versions:*)"
+  "Bash(kubectl auth can-i:*)"
+  "Bash(kubectl auth whoami:*)"
+  "Bash(kubectl cluster-info:*)"
+  "Bash(kubectl config current-context:*)"
+  "Bash(kubectl config get-contexts:*)"
+  "Bash(kubectl config view:*)"
+  "Bash(kubectl describe:*)"
+  "Bash(kubectl diff:*)"
+  "Bash(kubectl events:*)"
+  "Bash(kubectl explain:*)"
+  "Bash(kubectl get:*)"
+  "Bash(kubectl help:*)"
+  "Bash(kubectl logs:*)"
+  "Bash(kubectl top:*)"
+  "Bash(kubectl version:*)"
+  "Bash(launchctl list:*)"
+  "Bash(launchctl print:*)"
+  "Bash(ld --version:*)"
+  "Bash(lein --version:*)"
+  "Bash(lein deps :tree:*)"
+  "Bash(less:*)"
+  "Bash(lipo -info:*)"
+  "Bash(litecli --version:*)"
+  "Bash(lldb --version:*)"
+  "Bash(llvm-config --version:*)"
+  "Bash(locale:*)"
+  "Bash(log show:*)"
+  "Bash(ls:*)"
+  "Bash(lsd --version:*)"
+  "Bash(lsd:*)"
+  "Bash(lsof:*)"
+  "Bash(ltrace --version:*)"
+  "Bash(lua -v:*)"
+  "Bash(luarocks --version:*)"
+  "Bash(luarocks list:*)"
+  "Bash(make --version:*)"
+  "Bash(mamba --version:*)"
+  "Bash(mamba info:*)"
+  "Bash(mamba list:*)"
+  "Bash(man:*)"
+  "Bash(markdownlint --version:*)"
   "Bash(md5:*)"
   "Bash(md5sum:*)"
-  "Bash(shasum:*)"
-
-  # Binary inspection
-  "Bash(hexdump:*)"
-  "Bash(xxd:*)"
+  "Bash(mdfind:*)"
+  "Bash(mdls:*)"
+  "Bash(mdutil -s:*)"
+  "Bash(meson --version:*)"
+  "Bash(minikube ip:*)"
+  "Bash(minikube profile list:*)"
+  "Bash(minikube status:*)"
+  "Bash(minikube version:*)"
+  "Bash(mise current:*)"
+  "Bash(mise list:*)"
+  "Bash(mise plugins:*)"
+  "Bash(mix --version:*)"
+  "Bash(mix deps.tree:*)"
+  "Bash(mkdir:*)"
+  "Bash(mongo --version:*)"
+  "Bash(mongosh --version:*)"
+  "Bash(more:*)"
+  "Bash(mtr --version:*)"
+  "Bash(mvn --version:*)"
+  "Bash(mvn -v:*)"
+  "Bash(mvn dependency:list:*)"
+  "Bash(mvn dependency:resolve:*)"
+  "Bash(mvn dependency:tree:*)"
+  "Bash(mvn help:describe:*)"
+  "Bash(mvn help:effective-pom:*)"
+  "Bash(mvn help:effective-settings:*)"
+  "Bash(mvn help:system:*)"
+  "Bash(mycli --version:*)"
+  "Bash(mypy --version:*)"
+  "Bash(mysql --version:*)"
+  "Bash(mysqldump --version:*)"
+  "Bash(nano --version:*)"
+  "Bash(navi --version:*)"
+  "Bash(nc -z:*)"
+  "Bash(netstat:*)"
+  "Bash(networksetup -getinfo:*)"
+  "Bash(networksetup -listallhardwareports:*)"
+  "Bash(networksetup -listnetworkserviceorder:*)"
+  "Bash(nim --version:*)"
+  "Bash(nimble --version:*)"
+  "Bash(nimble list:*)"
+  "Bash(ninja --version:*)"
+  "Bash(nl:*)"
+  "Bash(nm --version:*)"
+  "Bash(nmap --version:*)"
+  "Bash(node --version:*)"
+  "Bash(node -e:*)"
+  "Bash(node -p:*)"
+  "Bash(node -v:*)"
+  "Bash(npm --version)"
+  "Bash(npm -v:*)"
+  "Bash(npm audit:*)"
+  "Bash(npm bin:*)"
+  "Bash(npm config get:*)"
+  "Bash(npm config list:*)"
+  "Bash(npm doctor:*)"
+  "Bash(npm explain:*)"
+  "Bash(npm fund:*)"
+  "Bash(npm help:*)"
+  "Bash(npm info:*)"
+  "Bash(npm list:*)"
+  "Bash(npm ls:*)"
+  "Bash(npm outdated:*)"
+  "Bash(npm pkg get:*)"
+  "Bash(npm prefix:*)"
+  "Bash(npm query:*)"
+  "Bash(npm root:*)"
+  "Bash(npm search:*)"
+  "Bash(npm show:*)"
+  "Bash(npm view:*)"
+  "Bash(npm why:*)"
+  "Bash(npx --version:*)"
+  "Bash(npx -v:*)"
+  "Bash(nslookup:*)"
+  "Bash(nuget --version:*)"
+  "Bash(nvim --version:*)"
+  "Bash(nvm --version:*)"
+  "Bash(nvm current:*)"
+  "Bash(nvm list:*)"
+  "Bash(objdump --version:*)"
+  "Bash(ocaml --version:*)"
   "Bash(od:*)"
-  "Bash(strings:*)"
-
-  # Process info (read-only)
+  "Bash(op --version:*)"
+  "Bash(opam --version:*)"
+  "Bash(opam list:*)"
+  "Bash(openssl s_client:*)"
+  "Bash(openssl version:*)"
+  "Bash(otool:*)"
+  "Bash(oxlint --version:*)"
+  "Bash(packer --version:*)"
+  "Bash(pandoc --version:*)"
+  "Bash(pass --version:*)"
+  "Bash(pass ls:*)"
+  "Bash(paste:*)"
+  "Bash(pdftotext:*)"
+  "Bash(pdm --version:*)"
+  "Bash(pdm config:*)"
+  "Bash(pdm info:*)"
+  "Bash(pdm list:*)"
+  "Bash(pdm show:*)"
+  "Bash(perl --version:*)"
+  "Bash(perl -v:*)"
+  "Bash(pg_config --version:*)"
+  "Bash(pg_dump --version:*)"
+  "Bash(pgcli --version:*)"
+  "Bash(php --version:*)"
+  "Bash(php -v:*)"
+  "Bash(ping -c:*)"
+  "Bash(pip --version:*)"
+  "Bash(pip -V:*)"
+  "Bash(pip check:*)"
+  "Bash(pip config get:*)"
+  "Bash(pip config list:*)"
+  "Bash(pip debug:*)"
+  "Bash(pip freeze:*)"
+  "Bash(pip help:*)"
+  "Bash(pip index versions:*)"
+  "Bash(pip list:*)"
+  "Bash(pip show:*)"
+  "Bash(pip3 --version:*)"
+  "Bash(pip3 freeze:*)"
+  "Bash(pip3 list:*)"
+  "Bash(pip3 show:*)"
+  "Bash(pipx --version:*)"
+  "Bash(pipx list:*)"
+  "Bash(plutil:*)"
+  "Bash(pmset -g:*)"
+  "Bash(pnpm --version:*)"
+  "Bash(pnpm -v:*)"
+  "Bash(pnpm audit:*)"
+  "Bash(pnpm bin:*)"
+  "Bash(pnpm config list:*)"
+  "Bash(pnpm env list:*)"
+  "Bash(pnpm list:*)"
+  "Bash(pnpm ls:*)"
+  "Bash(pnpm outdated:*)"
+  "Bash(pnpm root:*)"
+  "Bash(pnpm why:*)"
+  "Bash(poetry --version:*)"
+  "Bash(poetry check:*)"
+  "Bash(poetry config --list:*)"
+  "Bash(poetry env info:*)"
+  "Bash(poetry env list:*)"
+  "Bash(poetry search:*)"
+  "Bash(poetry show:*)"
+  "Bash(poetry version:*)"
+  "Bash(pre-commit --version:*)"
+  "Bash(prettier --version:*)"
+  "Bash(printenv:*)"
+  "Bash(procs --version:*)"
+  "Bash(procs:*)"
+  "Bash(protoc --version:*)"
   "Bash(ps:*)"
-  "Bash(top -l 1:*)"
-
-  # Other tools
-  "Bash(tree:*)"
-  "Bash(bat:*)"
-  "Bash(eza:*)"
-  "Bash(exa:*)"
-  "Bash(fzf:*)"
+  "Bash(psql --version:*)"
+  "Bash(pulumi config:*)"
+  "Bash(pulumi stack ls:*)"
+  "Bash(pulumi version:*)"
+  "Bash(pulumi whoami:*)"
+  "Bash(pwd:*)"
+  "Bash(pyenv --version:*)"
+  "Bash(pyenv version:*)"
+  "Bash(pyenv versions:*)"
+  "Bash(pyenv which:*)"
+  "Bash(pylint --version:*)"
+  "Bash(python --version:*)"
+  "Bash(python -V:*)"
+  "Bash(python -c:*)"
+  "Bash(python3 --version:*)"
+  "Bash(python3 -V:*)"
+  "Bash(python3 -c:*)"
+  "Bash(qlmanage -p:*)"
+  "Bash(qpdf:*)"
+  "Bash(rails --version:*)"
+  "Bash(rake --version:*)"
+  "Bash(rake -T:*)"
+  "Bash(ranlib --version:*)"
+  "Bash(rbenv --version:*)"
+  "Bash(rbenv version:*)"
+  "Bash(rbenv versions:*)"
+  "Bash(rbenv which:*)"
+  "Bash(read:*)"
+  "Bash(readlink:*)"
+  "Bash(realpath:*)"
+  "Bash(rebar3 --version:*)"
+  "Bash(redis-cli --version:*)"
+  "Bash(redis-server --version:*)"
+  "Bash(rev:*)"
+  "Bash(rg:*)"
+  "Bash(route:*)"
+  "Bash(rsync --version:*)"
+  "Bash(ruby --version:*)"
+  "Bash(ruby -e:*)"
+  "Bash(ruby -v:*)"
+  "Bash(ruff --version:*)"
+  "Bash(ruff check:*)"
+  "Bash(rustc --version:*)"
+  "Bash(rustc -V:*)"
+  "Bash(rustfmt --version:*)"
+  "Bash(rustup --version:*)"
+  "Bash(rustup check:*)"
+  "Bash(rustup component list:*)"
+  "Bash(rustup show:*)"
+  "Bash(rustup target list:*)"
+  "Bash(rustup toolchain list:*)"
+  "Bash(rustup which:*)"
+  "Bash(rvm --version:*)"
+  "Bash(rvm info:*)"
+  "Bash(rvm list:*)"
+  "Bash(sbt --version:*)"
+  "Bash(sbt about:*)"
+  "Bash(sbt version:*)"
+  "Bash(scala --version:*)"
+  "Bash(scala -version:*)"
+  "Bash(scc --version:*)"
+  "Bash(scc:*)"
+  "Bash(scp -V:*)"
+  "Bash(screen -list:*)"
+  "Bash(screen -v:*)"
+  "Bash(scutil --dns:*)"
+  "Bash(scutil --nc list:*)"
+  "Bash(scutil --proxy:*)"
+  "Bash(sdk current:*)"
+  "Bash(sdk list:*)"
+  "Bash(sdk version:*)"
+  "Bash(security find-identity:*)"
+  "Bash(security list-keychains:*)"
+  "Bash(sed:*)"
   "Bash(seq:*)"
-  "Bash(expr:*)"
-  "Bash(test:*)"
-  "Bash(xargs:*)"
-  "Bash(man:*)"
-  "Bash(tldr:*)"
+  "Bash(shasum:*)"
+  "Bash(shell-commands:*)"
+  "Bash(shellcheck --version:*)"
+  "Bash(shfmt --version:*)"
   "Bash(shfmt:*)"
+  "Bash(size --version:*)"
+  "Bash(softwareupdate --list:*)"
+  "Bash(sops --version:*)"
+  "Bash(sort:*)"
+  "Bash(spctl --assess:*)"
+  "Bash(spctl --status:*)"
+  "Bash(sqlite3 --version:*)"
+  "Bash(sqlite3 -version:*)"
+  "Bash(ss:*)"
+  "Bash(ssh -V:*)"
+  "Bash(ssh-keygen -l:*)"
+  "Bash(stack --version:*)"
+  "Bash(starship --version:*)"
+  "Bash(stat:*)"
+  "Bash(strace --version:*)"
+  "Bash(strings:*)"
+  "Bash(strip --version:*)"
+  "Bash(sw_vers:*)"
+  "Bash(swift --version:*)"
+  "Bash(swift package describe:*)"
+  "Bash(swift package show-dependencies:*)"
+  "Bash(swiftc --version:*)"
+  "Bash(sysctl:*)"
+  "Bash(system_profiler:*)"
+  "Bash(tail:*)"
+  "Bash(task --list:*)"
+  "Bash(task --version:*)"
+  "Bash(taskfile --version:*)"
+  "Bash(tee:*)"
+  "Bash(terraform --version:*)"
+  "Bash(terraform fmt -check:*)"
+  "Bash(terraform graph:*)"
+  "Bash(terraform help:*)"
+  "Bash(terraform output:*)"
+  "Bash(terraform plan:*)"
+  "Bash(terraform providers:*)"
+  "Bash(terraform show:*)"
+  "Bash(terraform state list:*)"
+  "Bash(terraform state show:*)"
+  "Bash(terraform validate:*)"
+  "Bash(terraform version:*)"
+  "Bash(terraform workspace list:*)"
+  "Bash(terraform workspace show:*)"
+  "Bash(terragrunt --version:*)"
+  "Bash(test:*)"
+  "Bash(tldr:*)"
+  "Bash(tmux -V:*)"
+  "Bash(tmux list-sessions:*)"
+  "Bash(tmux list-windows:*)"
+  "Bash(tofu --version:*)"
+  "Bash(tofu output:*)"
+  "Bash(tofu providers:*)"
+  "Bash(tofu state list:*)"
+  "Bash(tofu version:*)"
+  "Bash(tokei --version:*)"
+  "Bash(tokei:*)"
+  "Bash(top -l 1:*)"
+  "Bash(tr:*)"
+  "Bash(traceroute:*)"
+  "Bash(tree:*)"
+  "Bash(tsc --version:*)"
+  "Bash(type:*)"
+  "Bash(uname:*)"
+  "Bash(uniq:*)"
+  "Bash(uptime:*)"
+  "Bash(uv --version:*)"
+  "Bash(uv pip check:*)"
+  "Bash(uv pip freeze:*)"
+  "Bash(uv pip list:*)"
+  "Bash(uv pip show:*)"
+  "Bash(uv python list:*)"
+  "Bash(uv tool list:*)"
+  "Bash(uv version:*)"
+  "Bash(vagrant --version:*)"
+  "Bash(vagrant global-status:*)"
+  "Bash(vagrant status:*)"
+  "Bash(valgrind --version:*)"
+  "Bash(vi --version:*)"
+  "Bash(vim --version:*)"
+  "Bash(virtualenv --version:*)"
+  "Bash(vm_stat:*)"
+  "Bash(volta --version:*)"
+  "Bash(volta list:*)"
+  "Bash(watchman --version:*)"
+  "Bash(watchman watch-list:*)"
+  "Bash(wc:*)"
+  "Bash(wget --version:*)"
+  "Bash(which:*)"
+  "Bash(whoami:*)"
+  "Bash(whois:*)"
+  "Bash(xargs:*)"
+  "Bash(xcode-select --print-path:*)"
+  "Bash(xcode-select -p:*)"
+  "Bash(xcodebuild -showsdks:*)"
+  "Bash(xcodebuild -version:*)"
+  "Bash(xcrun --find:*)"
+  "Bash(xcrun --show-sdk-path:*)"
+  "Bash(xcrun --version:*)"
+  "Bash(xq --version:*)"
+  "Bash(xxd:*)"
+  "Bash(yamllint --version:*)"
+  "Bash(yarn --version:*)"
+  "Bash(yarn -v:*)"
+  "Bash(yarn audit:*)"
+  "Bash(yarn bin:*)"
+  "Bash(yarn config get:*)"
+  "Bash(yarn config list:*)"
+  "Bash(yarn info:*)"
+  "Bash(yarn list:*)"
+  "Bash(yarn outdated:*)"
+  "Bash(yarn why:*)"
+  "Bash(yq --version:*)"
+  "Bash(zellij --version:*)"
+  "Bash(zig version:*)"
+  "Bash(zoxide --version:*)"
+  "Bash(zoxide query:*)"
+  "Bash(~/.claude/hooks/allow-piped.sh:*)"
+  "Bash(~/dofiles/bin/executable_shell-commands:*)"
+  "Bash(~/dotfiles/dot_claude/hooks/executable_allow-piped.sh:*)"
+  "Glob"
+  "Grep"
+  "Read"
+  "Read(///**)"
+  "WebFetch"
+  "WebSearch"
+  "mcp__ide__getDiagnostics"
 )
 
 # src/lib/settings.sh
@@ -966,20 +1857,49 @@ CLAUDE_SETTINGS=""
 CLAUDE_HOOKS_DIR=""
 HOOK_FILE_PREFIX=""
 
+# Track files modified that are managed by chezmoi (used by shell_alias.sh too)
+CHEZMOI_MODIFIED_FILES=()
+
+# Check if any chezmoi files were modified
+has_chezmoi_modifications() {
+  [[ ${#CHEZMOI_MODIFIED_FILES[@]} -gt 0 ]]
+}
+
 # --- Initialization (must be called before using other functions) ---
 
 init_claude_paths() {
-  local custom_dir="${1:-}"
-  local hook_prefix="${2:-}"
+  # CLAUDE_DIR_OVERRIDE is for testing only (not exposed as CLI flag)
+  local custom_dir="${CLAUDE_DIR_OVERRIDE:-}"
 
-  CLAUDE_DIR="${custom_dir:-$HOME/.claude}"
+  # Check if chezmoi manages ~/.claude
+  if [[ -z "$custom_dir" ]] && is_claude_managed_by_chezmoi; then
+    CLAUDE_DIR="$(chezmoi source-path)/dot_claude"
+    HOOK_FILE_PREFIX="executable_"
+    # Track that ~/.claude is managed by chezmoi
+    CHEZMOI_MODIFIED_FILES+=("$HOME/.claude")
+    info "Detected chezmoi managing ~/.claude"
+    info "Installing to: $CLAUDE_DIR"
+  else
+    CLAUDE_DIR="${custom_dir:-$HOME/.claude}"
+    HOOK_FILE_PREFIX=""
+  fi
+
   CLAUDE_SETTINGS="$CLAUDE_DIR/settings.json"
   CLAUDE_HOOKS_DIR="$CLAUDE_DIR/hooks"
-  HOOK_FILE_PREFIX="${hook_prefix:-}"
+}
+
+is_claude_managed_by_chezmoi() {
+  # Check if chezmoi is installed
+  if ! command -v chezmoi &>/dev/null; then
+    return 1
+  fi
+
+  # Check if ~/.claude is managed by chezmoi
+  chezmoi source-path ~/.claude &>/dev/null
 }
 
 get_hook_filename() {
-  echo "${HOOK_FILE_PREFIX}allow-piped.sh"
+  echo "${HOOK_FILE_PREFIX}auto-approve-allowed-commands.sh"
 }
 
 get_hook_filepath() {
@@ -1089,7 +2009,7 @@ add_hook_to_settings() {
   # Settings always reference the non-prefixed filename at $HOME/.claude
   # (prefix is only for dotfiles managers like chezmoi)
   # shellcheck disable=SC2016
-  local new_hook='{"type": "command", "command": "$HOME/.claude/hooks/allow-piped.sh"}'
+  local new_hook='{"type": "command", "command": "$HOME/.claude/hooks/auto-approve-allowed-commands.sh"}'
 
   local current new
   current=$(get_settings)
@@ -1123,13 +2043,152 @@ add_hook_to_settings() {
 }
 
 hook_already_configured() {
-  # Check if PreToolUse has a Bash matcher with allow-piped.sh command
+  # Check if PreToolUse has a Bash matcher with auto-approve-allowed-commands.sh command
   get_settings | jq -e '
     .hooks.PreToolUse[]?
     | select(.matcher == "Bash")
     | .hooks[]?
-    | select(.command | endswith("allow-piped.sh"))
+    | select(.command | endswith("auto-approve-allowed-commands.sh"))
   ' &>/dev/null
+}
+
+# src/lib/shell_alias.sh
+# Shell alias configuration for Claude Code
+# Adds aliases to shell config files to set SHELL env var when running claude
+
+# Marker comment to identify our alias block
+ALIAS_MARKER="# Added by better-claude-code for shell alias"
+
+# Note: CHEZMOI_MODIFIED_FILES is defined in settings.sh
+# TARGET_FILE is set by get_config_target() to avoid subshell issues
+TARGET_FILE=""
+
+# --- Public API ---
+
+# Configure shell alias in all detected shell configs
+configure_shell_alias() {
+  local shell_path="$1"
+  local configured=false
+
+  # Bash
+  if [[ -f "$HOME/.bashrc" ]]; then
+    configure_alias "bash" "$shell_path" "$HOME/.bashrc"
+    configured=true
+  fi
+
+  # Zsh
+  if [[ -f "$HOME/.zshrc" ]]; then
+    configure_alias "zsh" "$shell_path" "$HOME/.zshrc"
+    configured=true
+  fi
+
+  # Fish
+  local fish_config="$HOME/.config/fish/config.fish"
+  if [[ -f "$fish_config" ]]; then
+    configure_alias "fish" "$shell_path" "$fish_config"
+    configured=true
+  fi
+
+  if [[ "$configured" == false ]]; then
+    warn "No shell config files found to configure"
+    return 1
+  fi
+}
+
+# --- Per-shell configuration ---
+
+# Configure alias for a specific shell
+# Args: shell_type (bash|zsh|fish), shell_path, config_file
+configure_alias() {
+  local shell_type="$1"
+  local shell_path="$2"
+  local config_file="$3"
+
+  # Sets TARGET_FILE global (avoids subshell so CHEZMOI_MODIFIED_FILES persists)
+  get_config_target "$config_file"
+  local target_file="$TARGET_FILE"
+
+  if alias_already_configured "$target_file"; then
+    info "${shell_type^} alias already configured"
+    return 0
+  fi
+
+  local alias_block
+  alias_block=$(generate_alias "$shell_type" "$shell_path")
+
+  append_to_config "$target_file" "$alias_block"
+  success "Added claude alias to $(basename "$target_file")"
+}
+
+# --- Alias generators ---
+
+generate_alias() {
+  local shell_type="$1"
+  local shell_path="$2"
+
+  if [[ "$shell_type" == "fish" ]]; then
+    cat <<EOF
+
+$ALIAS_MARKER
+function claude
+  SHELL="$shell_path" command claude \$argv
+end
+EOF
+  else
+    # bash and zsh use identical syntax
+    cat <<EOF
+
+$ALIAS_MARKER
+claude() {
+  SHELL="$shell_path" command claude "\$@"
+}
+EOF
+  fi
+}
+
+# --- Helpers ---
+
+# Get the target file to write to (handles chezmoi)
+# Sets TARGET_FILE global instead of echoing (to avoid subshell issues with array tracking)
+get_config_target() {
+  local config_file="$1"
+  local relative_path="${config_file#$HOME/}"
+
+  # Check if this specific file is managed by chezmoi
+  if is_file_managed_by_chezmoi "$relative_path"; then
+    local chezmoi_source
+    chezmoi_source=$(chezmoi source-path "$config_file" 2>/dev/null)
+    if [[ -n "$chezmoi_source" ]]; then
+      # Track that we modified a chezmoi-managed file
+      CHEZMOI_MODIFIED_FILES+=("$config_file")
+      TARGET_FILE="$chezmoi_source"
+      return
+    fi
+  fi
+
+  TARGET_FILE="$config_file"
+}
+
+is_file_managed_by_chezmoi() {
+  local relative_path="$1"
+
+  if ! command -v chezmoi &>/dev/null; then
+    return 1
+  fi
+
+  chezmoi source-path "$HOME/$relative_path" &>/dev/null
+}
+
+alias_already_configured() {
+  local file="$1"
+  grep -q "$ALIAS_MARKER" "$file" 2>/dev/null
+}
+
+append_to_config() {
+  local file="$1"
+  local content="$2"
+
+  echo "$content" >> "$file"
 }
 
 # :command.command_functions
@@ -1168,34 +2227,6 @@ parse_requirements() {
     key="$1"
     case "$key" in
       # :flag.case
-      --claude-dir | -d)
-
-        # :flag.case_arg
-        if [[ -n ${2+x} ]]; then
-          args['--claude-dir']="$2"
-          shift
-          shift
-        else
-          printf "%s\n" "--claude-dir requires an argument: --claude-dir, -d DIR" >&2
-          exit 1
-        fi
-        ;;
-
-      # :flag.case
-      --hook-prefix | -p)
-
-        # :flag.case_arg
-        if [[ -n ${2+x} ]]; then
-          args['--hook-prefix']="$2"
-          shift
-          shift
-        else
-          printf "%s\n" "--hook-prefix requires an argument: --hook-prefix, -p PREFIX" >&2
-          exit 1
-        fi
-        ;;
-
-      # :flag.case
       --shell | -s)
 
         # :flag.case_arg
@@ -1207,6 +2238,14 @@ parse_requirements() {
           printf "%s\n" "--shell requires an argument: --shell, -s SHELL_PATH" >&2
           exit 1
         fi
+        ;;
+
+      # :flag.case
+      --yes | -y)
+
+        # :flag.case_no_arg
+        args['--yes']=1
+        shift
         ;;
 
       -?*)

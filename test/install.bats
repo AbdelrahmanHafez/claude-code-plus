@@ -243,33 +243,15 @@ EOF
 
 # --- Custom options ---
 
-@test "respects custom directory" {
+@test "respects CLAUDE_DIR_OVERRIDE env var" {
   local custom_dir="$TEST_DIR/custom-claude"
   mkdir -p "$custom_dir"
 
   local project_root
   project_root=$(get_project_root)
-  run "$project_root/install.sh" -d "$custom_dir"
+  CLAUDE_DIR_OVERRIDE="$custom_dir" run "$project_root/install.sh"
 
   [ "$status" -eq 0 ]
   assert_file_exists "$custom_dir/settings.json"
   assert_file_exists "$custom_dir/hooks/auto-approve-allowed-commands.sh"
-}
-
-@test "respects hook prefix" {
-  run_install -p executable_
-  [ "$status" -eq 0 ]
-  assert_file_exists "$TEST_DIR/hooks/executable_auto-approve-allowed-commands.sh"
-  assert_executable "$TEST_DIR/hooks/executable_auto-approve-allowed-commands.sh"
-}
-
-@test "settings reference non-prefixed hook path" {
-  run_install -p executable_
-  [ "$status" -eq 0 ]
-
-  # Even with prefix, settings should reference the runtime path without prefix
-  local command_path
-  command_path=$(jq -r '.hooks.PreToolUse[0].hooks[0].command' "$TEST_DIR/settings.json")
-  [[ "$command_path" == *"auto-approve-allowed-commands.sh"* ]]
-  [[ "$command_path" != *"executable_"* ]]
 }

@@ -37,7 +37,14 @@ run_custom_install() {
   echo ""
 
   # Shell selection
-  if prompt_yes_no "Set which shell Claude Code uses?" "Y"; then
+  local shell_path="${args['--shell']:-}"
+  if [[ -z "$shell_path" ]]; then
+    shell_path=$(find_modern_bash)
+  fi
+  local shell_name
+  shell_name=$(basename "$shell_path")
+
+  if prompt_yes_no "Configure Claude Code to run commands in $shell_name?" "Y"; then
     step_shell
   else
     info "Skipping shell configuration"
@@ -88,7 +95,7 @@ step_deps() {
 }
 
 step_shell() {
-  step "Configuring shell"
+  step "Configuring shell for Claude Code commands"
 
   local shell_path="${args['--shell']:-}"
 
@@ -119,7 +126,7 @@ step_shell() {
   # Add shell alias to shell config files (workaround until bug is fixed)
   configure_shell_alias "$shell_path"
 
-  success "Shell configured"
+  success "Claude Code will now run commands in $shell_name"
 }
 
 step_hook() {
@@ -174,20 +181,22 @@ print_banner() {
 # --- Prompts ---
 
 prompt_install_mode() {
-  echo "Choose installation mode:"
-  echo ""
-  echo "  [1] Recommended - Install everything with sensible defaults"
-  echo "      • Modern bash (4.4+) as shell"
-  echo "      • Auto-approve hook for compound commands"
-  echo "      • Safe read-only command permissions"
-  echo ""
-  echo "  [2] Custom - Choose what to install"
-  echo ""
+  # Print menu to /dev/tty so it's not captured by command substitution
+  printf '\n' > /dev/tty
+  printf "${BOLD}Choose installation mode:${NC}\n" > /dev/tty
+  printf '\n' > /dev/tty
+  printf "  ${GREEN}[1]${NC} ${BOLD}Recommended${NC} - Install everything with sensible defaults\n" > /dev/tty
+  printf "      • Claude Code runs commands in modern bash (4.4+)\n" > /dev/tty
+  printf "      • Auto-approve hook for compound commands\n" > /dev/tty
+  printf "      • Safe read-only command permissions\n" > /dev/tty
+  printf '\n' > /dev/tty
+  printf "  ${BLUE}[2]${NC} ${BOLD}Custom${NC} - Choose what to install\n" > /dev/tty
+  printf '\n' > /dev/tty
 
   local choice
   while true; do
     read -p "Enter choice [1/2]: " -n 1 -r choice
-    echo ""
+    printf '\n' > /dev/tty
     case "$choice" in
       1) echo "recommended"; return ;;
       2) echo "custom"; return ;;
@@ -235,16 +244,26 @@ print_completion() {
   # Prompt to apply chezmoi if any managed files were modified
   if has_chezmoi_modifications; then
     echo ""
+    # Replace $HOME with ~ for display
     local chezmoi_targets="${CHEZMOI_MODIFIED_FILES[*]}"
-    if prompt_yes_no "Run 'chezmoi apply $chezmoi_targets' now?" "Y"; then
-      chezmoi apply "${CHEZMOI_MODIFIED_FILES[@]}"
+    chezmoi_targets="${chezmoi_targets//$HOME/\~}"
+    local chezmoi_cmd="chezmoi apply $chezmoi_targets"
+    if prompt_yes_no "Run $(cmd "$chezmoi_cmd") now?" "Y"; then
+      # shellcheck disable=SC2086
+      chezmoi apply $chezmoi_targets
       success "Chezmoi applied"
     else
-      warn "Remember to run 'chezmoi apply $chezmoi_targets' before using Claude Code"
+      warn "Remember to run $(cmd "$chezmoi_cmd") before using Claude Code"
     fi
   fi
   echo ""
-  info "Restart your shell and run 'claude' to start using Better Claude Code."
+  local source_cmd
+  case "$(basename "$SHELL")" in
+    fish) source_cmd="source ~/.config/fish/config.fish" ;;
+    zsh)  source_cmd="source ~/.zshrc" ;;
+    *)    source_cmd="source ~/.bashrc" ;;
+  esac
+  info "Open a new terminal or run $(cmd "$source_cmd"), then run $(cmd "claude") to start."
 }
 
 main
