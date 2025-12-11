@@ -1,7 +1,6 @@
 # Claude Code Plus
 
 [![npm version](https://img.shields.io/npm/v/claude-code-plus.svg)](https://www.npmjs.com/package/claude-code-plus)
-[![npm downloads](https://img.shields.io/npm/dm/claude-code-plus.svg)](https://www.npmjs.com/package/claude-code-plus)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Node.js Version](https://img.shields.io/node/v/claude-code-plus.svg)](https://nodejs.org)
 
@@ -181,7 +180,7 @@ rm ~/.claude/hooks/auto-approve-allowed-commands.sh
 
 ## Contributing
 
-Issues and PRs welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+Issues and PRs welcome!
 
 ## License
 
