@@ -6,8 +6,8 @@ This file helps Claude Code understand the project structure and development wor
 
 Claude Code Plus is an installer that enhances Claude Code CLI. It addresses two main issues:
 
-1. **Piped commands not auto-approved** ([#13340](https://github.com/anthropics/claude-code/issues/13340)) - Fixed via a PreToolUse hook
-2. **Custom shell not respected** ([#7490](https://github.com/anthropics/claude-code/issues/7490)) - Fixed via settings.json env config + shell alias workaround
+1. **Piped commands not auto-approved** ([#13340](https://github.com/anthropics/claude-code/issues/13340)) - Addressed via a PreToolUse hook
+2. **Custom shell not respected** ([#7490](https://github.com/anthropics/claude-code/issues/7490)) - Addressed via settings.json env config + shell alias workaround
 
 ## Project Structure
 
@@ -137,7 +137,7 @@ Then rebuild with `npm run build`.
 3. **Non-interactive mode**: `-y` flag for scripting/automation
 4. **Cross-platform bash detection**: Finds modern bash dynamically (Homebrew paths on macOS, /bin/bash on Linux)
 5. **Auto-detect chezmoi**: Automatically detects if `~/.claude` is managed by chezmoi and adjusts paths/prefixes accordingly
-6. **Shell alias workaround**: Adds `claude` function to shell configs that sets `SHELL` env var (workaround until upstream bug is fixed)
+6. **Shell alias workaround**: Adds `claude` function to shell configs that sets `SHELL` env var (workaround until this is addressed upstream)
 
 ### CLI Flags
 
@@ -163,7 +163,7 @@ The installer auto-detects chezmoi:
 
 ### Shell Alias Workaround (`src/shell-alias.ts`)
 
-Until Claude Code fixes issue #7490, we add a shell function/alias:
+Until Claude Code addresses issue #7490, we add a shell function/alias:
 - Bash/Zsh: `claude() { SHELL=/path/to/bash command claude "$@"; }`
 - Fish: `function claude; SHELL=/path/to/bash command claude $argv; end`
 - Added to all existing shell config files (.bashrc, .bash_profile, .zshrc, config.fish)
@@ -253,5 +253,5 @@ sed -n '45,95p' src/old-file.ts > src/new-file.ts
 
 ## Related Issues
 
-- [#13340](https://github.com/anthropics/claude-code/issues/13340) - Piped commands permission bug
+- [#13340](https://github.com/anthropics/claude-code/issues/13340) - Piped commands permission limitation
 - [#7490](https://github.com/anthropics/claude-code/issues/7490) - Custom shell not respected

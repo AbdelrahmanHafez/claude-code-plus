@@ -16,7 +16,7 @@
 - [ ] [12. Dotfiles manager support for shell config modifications](#12-dotfiles-manager-support-for-shell-config-modifications)
 - [ ] [13. Redesign installer flow with customization options](#13-redesign-installer-flow-with-customization-options)
 - [ ] [14. Document and showcase hook capabilities](#14-document-and-showcase-hook-capabilities)
-- [ ] [15. Rebrand from "fix bugs" to "enhance behavior"](#15-rebrand-from-fix-bugs-to-enhance-behavior)
+- [x] [15. Rebrand from "fix bugs" to "enhance behavior"](#15-rebrand-from-fix-bugs-to-enhance-behavior)
 - [x] [16. Remove --hook-prefix flag after dotfiles manager support](#16-remove---hook-prefix-flag-after-dotfiles-manager-support)
 - [x] [17. Default shell to bash instead of $SHELL](#17-default-shell-to-bash-instead-of-shell)
 - [x] [18. Use relative hook path in settings.json](#18-use-relative-hook-path-in-settingsjson) - Uses `$HOME` which Claude expands at runtime
