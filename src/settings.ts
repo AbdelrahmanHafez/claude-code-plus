@@ -5,6 +5,8 @@ import * as path from 'node:path';
 import { getClaudeDir, trackChezmoiFile } from './utils/chezmoi.js';
 import { info, file } from './utils/colors.js';
 
+// --- Types ---
+
 export interface HookEntry {
   type: 'command';
   command: string;
@@ -30,6 +32,115 @@ export interface ClaudeSettings {
   };
   [key: string]: unknown;
 }
+
+export interface HookConfig {
+  matcher: string;
+  hooks: HookEntry[];
+}
+
+// --- Pure transformation functions (no I/O) ---
+
+export function setEnvVarInSettings(settings: ClaudeSettings, name: string, value: string): ClaudeSettings {
+  return {
+    ...settings,
+    env: {
+      ...settings.env,
+      [name]: value
+    }
+  };
+}
+
+export function addPermissionToSettings(
+  settings: ClaudeSettings,
+  permission: string
+): { settings: ClaudeSettings; added: boolean } {
+  const currentAllow = settings.permissions?.allow ?? [];
+
+  if (currentAllow.includes(permission)) {
+    return { settings, added: false };
+  }
+
+  return {
+    settings: {
+      ...settings,
+      permissions: {
+        ...settings.permissions,
+        allow: [...currentAllow, permission]
+      }
+    },
+    added: true
+  };
+}
+
+export function hasPermissionInSettings(settings: ClaudeSettings, permission: string): boolean {
+  return settings.permissions?.allow?.includes(permission) ?? false;
+}
+
+export function addPermissionsToSettings(
+  settings: ClaudeSettings,
+  permissions: string[]
+): { settings: ClaudeSettings; added: number } {
+  const currentAllow = settings.permissions?.allow ?? [];
+  const newPermissions = permissions.filter(p => !currentAllow.includes(p));
+
+  if (newPermissions.length === 0) {
+    return { settings, added: 0 };
+  }
+
+  return {
+    settings: {
+      ...settings,
+      permissions: {
+        ...settings.permissions,
+        allow: [...currentAllow, ...newPermissions]
+      }
+    },
+    added: newPermissions.length
+  };
+}
+
+export function addHookToSettings(settings: ClaudeSettings, hookConfig: HookConfig): ClaudeSettings {
+  const currentPreToolUse = settings.hooks?.PreToolUse ?? [];
+  const existingIndex = currentPreToolUse.findIndex(
+    (matcherHook) => matcherHook.matcher === hookConfig.matcher
+  );
+
+  let newPreToolUse: MatcherHook[];
+
+  if (existingIndex >= 0) {
+    // Merge hooks arrays (check by command path)
+    const existing = currentPreToolUse[existingIndex];
+    const newHooks = hookConfig.hooks.filter(
+      (hookEntry) => !existing.hooks.some((hook) => hook.command === hookEntry.command)
+    );
+    newPreToolUse = [
+      ...currentPreToolUse.slice(0, existingIndex),
+      { ...existing, hooks: [...existing.hooks, ...newHooks] },
+      ...currentPreToolUse.slice(existingIndex + 1)
+    ];
+  } else {
+    newPreToolUse = [...currentPreToolUse, hookConfig];
+  }
+
+  return {
+    ...settings,
+    hooks: {
+      ...settings.hooks,
+      PreToolUse: newPreToolUse
+    }
+  };
+}
+
+export function hasHookInSettings(settings: ClaudeSettings, hookPath: string): boolean {
+  if (!settings.hooks?.PreToolUse) {
+    return false;
+  }
+  return settings.hooks.PreToolUse.some((matcherHook) =>
+    matcherHook.hooks.some((hookEntry) => hookEntry.command === hookPath)
+  );
+}
+
+// --- I/O functions ---
 
 function getSettingsPath(): string {
   return path.join(getClaudeDir(), 'settings.json');
@@ -59,103 +170,43 @@ export function saveSettings(settings: ClaudeSettings): void {
   trackChezmoiFile(settingsPath);
 }
 
+// --- High-level I/O wrappers (for CLI usage) ---
+
 export function setEnvVar(name: string, value: string): void {
   const settings = getSettings();
-  if (!settings.env) {
-    settings.env = {};
-  }
-  settings.env[name] = value;
-  saveSettings(settings);
+  const newSettings = setEnvVarInSettings(settings, name, value);
+  saveSettings(newSettings);
 }
 
 export function addPermission(permission: string): boolean {
   const settings = getSettings();
-  if (!settings.permissions) {
-    settings.permissions = {};
+  const result = addPermissionToSettings(settings, permission);
+  if (result.added) {
+    saveSettings(result.settings);
   }
-  if (!settings.permissions.allow) {
-    settings.permissions.allow = [];
-  }
-  if (settings.permissions.allow.includes(permission)) {
-    return false; // Already exists
-  }
-  settings.permissions.allow.push(permission);
-  saveSettings(settings);
-  return true;
+  return result.added;
 }
 
 export function hasPermission(permission: string): boolean {
-  const settings = getSettings();
-  return settings.permissions?.allow?.includes(permission) ?? false;
+  return hasPermissionInSettings(getSettings(), permission);
 }
 
 export function addPermissions(permissions: string[]): number {
   const settings = getSettings();
-  if (!settings.permissions) {
-    settings.permissions = {};
+  const result = addPermissionsToSettings(settings, permissions);
+  if (result.added > 0) {
+    saveSettings(result.settings);
   }
-  if (!settings.permissions.allow) {
-    settings.permissions.allow = [];
-  }
-
-  let added = 0;
-  for (const permission of permissions) {
-    if (!settings.permissions.allow.includes(permission)) {
-      settings.permissions.allow.push(permission);
-      added++;
-    }
-  }
-
-  if (added > 0) {
-    saveSettings(settings);
-  }
-  return added;
-}
-
-export interface HookConfig {
-  matcher: string;
-  hooks: HookEntry[];
+  return result.added;
 }
 
 export function addHook(hookConfig: HookConfig): boolean {
   const settings = getSettings();
-  if (!settings.hooks) {
-    settings.hooks = {};
-  }
-  if (!settings.hooks.PreToolUse) {
-    settings.hooks.PreToolUse = [];
-  }
-
-  // Check if hook already exists with same matcher
-  const existingIndex = settings.hooks.PreToolUse.findIndex(
-    (matcherHook) => matcherHook.matcher === hookConfig.matcher
-  );
-
-  if (existingIndex >= 0) {
-    // Merge hooks arrays (check by command path)
-    const existing = settings.hooks.PreToolUse[existingIndex];
-    for (const hookEntry of hookConfig.hooks) {
-      const alreadyExists = existing.hooks.some(
-        (existingHook) => existingHook.command === hookEntry.command
-      );
-      if (!alreadyExists) {
-        existing.hooks.push(hookEntry);
-      }
-    }
-  } else {
-    settings.hooks.PreToolUse.push(hookConfig);
-  }
-
-  saveSettings(settings);
+  const newSettings = addHookToSettings(settings, hookConfig);
+  saveSettings(newSettings);
   return true;
 }
 
 export function hasHook(hookPath: string): boolean {
-  const settings = getSettings();
-  if (!settings.hooks?.PreToolUse) {
-    return false;
-  }
-  return settings.hooks.PreToolUse.some((matcherHook) =>
-    matcherHook.hooks.some((hookEntry) => hookEntry.command === hookPath)
-  );
+  return hasHookInSettings(getSettings(), hookPath);
 }

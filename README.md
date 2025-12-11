@@ -132,7 +132,7 @@ No special flags needed - it just works!
 |------|---------|
 | `~/.claude/settings.json` | Updated with shell config, hook config, and permissions |
 | `~/.claude/hooks/auto-approve-allowed-commands.sh` | The hook script that enables piped command auto-approval |
-| `~/.bashrc`, `~/.zshrc`, `~/.config/fish/config.fish` | Shell alias added (workaround for shell bug). Note: fish config is modified for future compatibility, but fish is not yet supported by Claude Code. |
+| `~/.bashrc`, `~/.bash_profile`, `~/.zshrc`, `~/.config/fish/config.fish` | Shell alias added (workaround for shell bug). Note: fish config is modified for future compatibility, but fish is not yet supported by Claude Code. |
 
 ## Safe Permissions Added
 
