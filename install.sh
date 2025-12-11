@@ -1551,6 +1551,7 @@ DEFAULT_PERMISSIONS=(
   "Bash(docker system df:*)"
   "Bash(docker system info:*)"
   "Bash(docker top:*)"
+  "Bash(docker --version:*)"
   "Bash(docker version:*)"
   "Bash(docker volume inspect:*)"
   "Bash(docker volume ls:*)"
