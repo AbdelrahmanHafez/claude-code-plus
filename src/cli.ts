@@ -336,7 +336,7 @@ function stepShell(shellPath: string): void {
   // Add shell alias to shell config files
   configureShellAlias(shellPath);
 
-  success(`Claude Code will now run commands in ${shellName}`);
+  success(`Claude Code will now run commands in ${cmd(shellName)}`);
 }
 
 function stepHook(): void {
@@ -379,7 +379,10 @@ async function runCustomInstall(defaultShellPath: string): Promise<void> {
   if (useModernBash) {
     stepShell(defaultShellPath);
   } else {
-    info(`Enter shell name or path (e.g., ${cmd('fish')}, ${file('/opt/homebrew/bin/zsh')})`);
+    warn('Note: Claude Code currently only works reliably with bash and zsh.');
+    info('Other shells (fish, nushell, etc.) may not work due to upstream limitations.');
+    console.log('');
+    info(`Enter shell name or path (e.g., ${cmd('zsh')}, ${file('/opt/homebrew/bin/zsh')})`);
     const shellInput = await promptText('Shell: ');
 
     if (!shellInput) {
@@ -388,6 +391,17 @@ async function runCustomInstall(defaultShellPath: string): Promise<void> {
       const resolvedPath = resolveShellPath(shellInput);
       if (resolvedPath) {
         stepShell(resolvedPath);
+
+        // Warn if using a non-bash/zsh shell
+        const shellName = path.basename(resolvedPath);
+        if (shellName !== 'bash' && shellName !== 'zsh') {
+          console.log('');
+          warn(`${cmd(shellName)} is not officially supported by Claude Code.`);
+          info('To verify your shell is working after installation:');
+          info('  1. Open a new terminal');
+          info(`  2. Run ${cmd('claude')} and type: ${cmd('!echo $SHELL')}`);
+          info('The "!" prefix runs commands in Claude\'s configured shell.');
+        }
       } else {
         error(`Could not find shell: ${shellInput}`);
         info('Skipping shell configuration');

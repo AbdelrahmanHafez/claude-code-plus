@@ -105,7 +105,7 @@ describe('shell-alias', function() {
       expect(fs.existsSync(path.join(testDir, '.zshrc'))).toBe(false);
     });
 
-    it('does not duplicate alias if already present', function() {
+    it('does not duplicate alias if already present with same shell', function() {
       // Arrange
       const { configFiles } = createTestContext({ shells: ['bash'] });
       const shellPath = '/opt/homebrew/bin/bash';
@@ -120,6 +120,25 @@ describe('shell-alias', function() {
       const contentAfter = fs.readFileSync(configFiles.bashrc, 'utf-8');
       const markerCountAfter = (contentAfter.match(/# Added by claude-code-plus/g) || []).length;
       expect(markerCountAfter).toBe(markerCount);
+    });
+
+    it('updates alias when shell path changes', function() {
+      // Arrange
+      const { configFiles } = createTestContext({ shells: ['bash'] });
+      const oldShellPath = '/opt/homebrew/bin/bash';
+      const newShellPath = '/usr/local/bin/fish';
+      configureShellAlias(oldShellPath);
+
+      // Act
+      configureShellAlias(newShellPath);
+
+      // Assert
+      const content = fs.readFileSync(configFiles.bashrc, 'utf-8');
+      expect(content).toContain(`SHELL="${newShellPath}"`);
+      expect(content).not.toContain(`SHELL="${oldShellPath}"`);
+      // Should only have one marker (replaced, not duplicated)
+      const markerCount = (content.match(/# Added by claude-code-plus/g) || []).length;
+      expect(markerCount).toBe(1);
     });
 
     it('adds aliases to multiple shell configs', function() {

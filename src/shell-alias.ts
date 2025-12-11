@@ -2,7 +2,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { info, success, file } from './utils/colors.js';
+import { success, file } from './utils/colors.js';
 import { exec } from './utils/exec.js';
 import { trackChezmoiFile } from './utils/chezmoi.js';
 
@@ -37,6 +37,27 @@ const SHELL_CONFIGS: ShellConfig[] = [
 
 function hasExistingAlias(content: string): boolean {
   return content.includes(ALIAS_MARKER);
+}
+
+/**
+ * Remove existing claude-code-plus alias block from content.
+ * The block starts with ALIAS_MARKER and ends before the next non-alias line
+ * or end of file.
+ */
+function removeExistingAlias(content: string): string {
+  // Match from marker to the end of the alias block
+  // For bash/zsh: ends with "}\n"
+  // For fish: ends with "end\n"
+  const bashZshPattern = new RegExp(
+    `\\n?${ALIAS_MARKER}\\nclaude\\(\\) \\{[^}]+\\}\\n`,
+    'g'
+  );
+  const fishPattern = new RegExp(
+    `\\n?${ALIAS_MARKER}\\nfunction claude\\n[\\s\\S]*?\\nend\\n`,
+    'g'
+  );
+
+  return content.replace(bashZshPattern, '').replace(fishPattern, '');
 }
 
 /**
@@ -82,24 +103,26 @@ export function configureShellAlias(shellPath: string): void {
       const { targetPath, isChezmoiManaged } = resolveConfigTarget(fullPath);
 
       // Read from the resolved target (chezmoi source or original)
-      const content = fs.readFileSync(targetPath, 'utf-8');
+      let content = fs.readFileSync(targetPath, 'utf-8');
+      const isUpdate = hasExistingAlias(content);
 
-      if (hasExistingAlias(content)) {
-        info(`${shellConfig.name} alias already configured`);
-        continue;
+      if (isUpdate) {
+        // Remove existing alias so we can replace it with new shell path
+        content = removeExistingAlias(content);
       }
 
       // Only add newline prefix if file doesn't end with one
       const prefix = content.endsWith('\n') ? '\n' : '\n\n';
       const alias = prefix + shellConfig.aliasTemplate(shellPath);
-      fs.appendFileSync(targetPath, alias);
+      fs.writeFileSync(targetPath, content + alias);
 
       // Track chezmoi-managed files for later apply
       if (isChezmoiManaged) {
         trackChezmoiFile(fullPath);
       }
 
-      success(`Added claude alias to ${file(configPath)}`);
+      const action = isUpdate ? 'Updated' : 'Added';
+      success(`${action} claude alias in ${file(configPath)}`);
     }
   }
 }

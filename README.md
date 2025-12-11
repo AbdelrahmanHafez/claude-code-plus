@@ -104,10 +104,10 @@ This installs everything with defaults (modern bash, hook, permissions).
 ### Custom Shell
 
 In the **Custom** installation mode, you can choose to use a different shell instead of modern bash. When prompted, enter either:
-- A shell name (e.g., `fish`, `zsh`) - will be resolved using `which`
-- A full path (e.g., `/opt/homebrew/bin/fish`)
+- A shell name (e.g., `zsh`) - will be resolved using `which`
+- A full path (e.g., `/opt/homebrew/bin/zsh`)
 
-> **Note:** Modern bash (4.4+) is recommended for Claude Code as it provides the best compatibility with the auto-approve hook.
+> **⚠️ Shell Compatibility:** Claude Code currently only works reliably with **bash** and **zsh**. Other shells like fish, nushell, etc. are not yet supported due to upstream limitations in how Claude Code spawns shell processes. If you choose a non-bash/zsh shell, you can verify it's working by running `!echo $SHELL` inside Claude Code (the `!` prefix runs commands in Claude's configured shell).
 
 ### Help
 
@@ -132,7 +132,7 @@ No special flags needed - it just works!
 |------|---------|
 | `~/.claude/settings.json` | Updated with shell config, hook config, and permissions |
 | `~/.claude/hooks/auto-approve-allowed-commands.sh` | The hook script that enables piped command auto-approval |
-| `~/.bashrc`, `~/.zshrc`, `~/.config/fish/config.fish` | Shell alias added (workaround for shell bug) |
+| `~/.bashrc`, `~/.zshrc`, `~/.config/fish/config.fish` | Shell alias added (workaround for shell bug). Note: fish config is modified for future compatibility, but fish is not yet supported by Claude Code. |
 
 ## Safe Permissions Added
 
