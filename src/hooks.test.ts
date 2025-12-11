@@ -8,7 +8,7 @@ import {
   installHook,
   configureHookInSettings
 } from './hooks.js';
-import { getSettings, hasHook } from './settings.js';
+import { getSettings } from './settings.js';
 
 describe('hooks', function() {
   let testDir: string;
@@ -182,7 +182,7 @@ describe('hooks', function() {
 
       // Assert
       const settings = getSettings();
-      const bashHook = settings.hooks?.PreToolUse?.find(h => h.matcher === 'Bash');
+      const bashHook = settings.hooks?.PreToolUse?.find(hook => hook.matcher === 'Bash');
       expect(bashHook).toBeDefined();
     });
 

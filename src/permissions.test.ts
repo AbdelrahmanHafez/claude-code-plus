@@ -17,14 +17,14 @@ describe('permissions', function() {
       // Arrange
       // Permissions can be Bash(cmd:*), Bash(cmd), Glob, Grep, Read, etc.
       const validPatterns = [
-        /^Bash\(.+\)$/,      // Bash permissions
-        /^Glob$/,            // Glob tool
-        /^Grep$/,            // Grep tool
-        /^Read\(.+\)$/,      // Read with path
-        /^Read$/,            // Read tool
-        /^WebFetch$/,        // WebFetch tool
-        /^WebSearch$/,       // WebSearch tool
-        /^mcp__.+$/          // MCP tools
+        /^Bash\(.+\)$/, // Bash permissions
+        /^Glob$/, // Glob tool
+        /^Grep$/, // Grep tool
+        /^Read\(.+\)$/, // Read with path
+        /^Read$/, // Read tool
+        /^WebFetch$/, // WebFetch tool
+        /^WebSearch$/, // WebSearch tool
+        /^mcp__.+$/ // MCP tools
       ];
 
       // Act & Assert

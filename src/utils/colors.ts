@@ -10,7 +10,6 @@ const MAGENTA = '\x1b[35m';
 const CYAN = '\x1b[36m';
 const BRIGHT_GREEN = '\x1b[92m';
 const BRIGHT_CYAN = '\x1b[96m';
-const BRIGHT_MAGENTA = '\x1b[95m';
 
 export function info(message: string): void {
   console.log(`${BLUE}ℹ${RESET} ${message}`);

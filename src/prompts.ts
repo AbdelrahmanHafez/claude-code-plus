@@ -11,8 +11,8 @@ export function isTTY(): boolean {
  * Read a single keypress without requiring Enter
  */
 function readKey(): Promise<string> {
-  return new Promise((resolve) => {
-    const stdin = process.stdin;
+  return new Promise(function readKeyPromise(resolve) {
+    const { stdin } = process;
     const wasRaw = stdin.isRaw;
 
     if (stdin.isTTY) {
@@ -21,7 +21,7 @@ function readKey(): Promise<string> {
     stdin.resume();
     stdin.setEncoding('utf8');
 
-    const onData = (key: string) => {
+    function onData(key: string): void {
       if (stdin.isTTY) {
         stdin.setRawMode(wasRaw ?? false);
       }
@@ -34,7 +34,7 @@ function readKey(): Promise<string> {
       }
 
       resolve(key);
-    };
+    }
 
     stdin.once('data', onData);
   });

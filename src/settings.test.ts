@@ -300,9 +300,9 @@ describe('settings', function() {
 
       // Assert
       const settings = getSettings();
-      const bashHook = settings.hooks?.PreToolUse?.find(h => h.matcher === 'Bash');
-      expect(bashHook?.hooks.some(h => h.command === 'hook1.sh')).toBe(true);
-      expect(bashHook?.hooks.some(h => h.command === 'hook2.sh')).toBe(true);
+      const bashHook = settings.hooks?.PreToolUse?.find(hook => hook.matcher === 'Bash');
+      expect(bashHook?.hooks.some(hook => hook.command === 'hook1.sh')).toBe(true);
+      expect(bashHook?.hooks.some(hook => hook.command === 'hook2.sh')).toBe(true);
     });
 
     it('does not duplicate hook paths', function() {
@@ -315,8 +315,8 @@ describe('settings', function() {
 
       // Assert
       const settings = getSettings();
-      const bashHook = settings.hooks?.PreToolUse?.find(h => h.matcher === 'Bash');
-      expect(bashHook?.hooks.filter(h => h.command === 'hook1.sh').length).toBe(1);
+      const bashHook = settings.hooks?.PreToolUse?.find(hook => hook.matcher === 'Bash');
+      expect(bashHook?.hooks.filter(hook => hook.command === 'hook1.sh').length).toBe(1);
     });
 
     it('adds separate entries for different matchers', function() {

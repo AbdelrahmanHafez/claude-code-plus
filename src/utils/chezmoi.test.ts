@@ -1,6 +1,3 @@
-import * as fs from 'node:fs';
-import * as path from 'node:path';
-import * as os from 'node:os';
 import {
   isChezmoiManaged,
   getClaudeDir,
@@ -83,7 +80,6 @@ describe('chezmoi', function() {
     it('returns ~/.claude when no override is set and chezmoi not managing', function() {
       // Arrange
       delete process.env.CLAUDE_DIR_OVERRIDE;
-      const home = process.env.HOME;
 
       // Act
       const result = getClaudeDir();

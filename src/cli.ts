@@ -131,16 +131,26 @@ function resolveShellPath(input: string): string | null {
 type PackageManager = 'brew' | 'apt' | 'dnf' | 'pacman' | 'apk' | null;
 
 function detectPackageManager(): PackageManager {
-  if (commandExists('brew')) return 'brew';
-  if (commandExists('apt')) return 'apt';
-  if (commandExists('dnf')) return 'dnf';
-  if (commandExists('pacman')) return 'pacman';
-  if (commandExists('apk')) return 'apk';
+  if (commandExists('brew')) {
+    return 'brew';
+  }
+  if (commandExists('apt')) {
+    return 'apt';
+  }
+  if (commandExists('dnf')) {
+    return 'dnf';
+  }
+  if (commandExists('pacman')) {
+    return 'pacman';
+  }
+  if (commandExists('apk')) {
+    return 'apk';
+  }
   return null;
 }
 
-function getInstallCommand(pm: PackageManager, pkg: string): string | null {
-  switch (pm) {
+function getInstallCommand(pkgManager: PackageManager, pkg: string): string | null {
+  switch (pkgManager) {
     case 'brew': return `brew install ${pkg}`;
     case 'apt': return `sudo apt install -y ${pkg}`;
     case 'dnf': return `sudo dnf install -y ${pkg}`;
@@ -151,9 +161,9 @@ function getInstallCommand(pm: PackageManager, pkg: string): string | null {
 }
 
 function getInstallHint(pkg: string): string {
-  const pm = detectPackageManager();
-  if (pm) {
-    return getInstallCommand(pm, pkg)!;
+  const pkgManager = detectPackageManager();
+  if (pkgManager) {
+    return getInstallCommand(pkgManager, pkg)!;
   }
   if (isMacOS()) {
     return `brew install ${pkg}`;
@@ -163,18 +173,18 @@ function getInstallHint(pkg: string): string {
 }
 
 function installPackage(pkg: string): boolean {
-  const pm = detectPackageManager();
-  if (!pm) {
+  const pkgManager = detectPackageManager();
+  if (!pkgManager) {
     error('No supported package manager found');
     return false;
   }
 
-  const installCmd = getInstallCommand(pm, pkg);
+  const installCmd = getInstallCommand(pkgManager, pkg);
   if (!installCmd) {
     return false;
   }
 
-  info(`Installing ${pkg} with ${pm}...`);
+  info(`Installing ${pkg} with ${pkgManager}...`);
   const result = exec(installCmd);
 
   if (result.success) {
@@ -246,7 +256,7 @@ function displayDependencyStatuses(statuses: DependencyStatus[]): void {
   }
 
   // Show macOS hint for bash if missing
-  const bashMissing = statuses.some(d => d.packageName === 'bash' && !d.installed);
+  const bashMissing = statuses.some(dep => dep.packageName === 'bash' && !dep.installed);
   if (bashMissing && isMacOS()) {
     info('macOS ships with bash 3.2, which is too old');
   }
@@ -256,14 +266,14 @@ async function installMissingDependencies(
   statuses: DependencyStatus[],
   nonInteractive: boolean
 ): Promise<boolean> {
-  const missing = statuses.filter(d => !d.installed);
+  const missing = statuses.filter(dep => !dep.installed);
 
   if (missing.length === 0) {
     return true;
   }
 
-  const pm = detectPackageManager();
-  if (!pm) {
+  const pkgManager = detectPackageManager();
+  if (!pkgManager) {
     console.log('');
     info('No supported package manager found. Please install manually:');
     for (const dep of missing) {
@@ -296,15 +306,15 @@ async function installMissingDependencies(
   return true;
 }
 
-async function checkDependencies(nonInteractive: boolean): Promise<boolean> {
+function checkDependencies(nonInteractive: boolean): Promise<boolean> {
   // Phase 1: Check all dependencies and display statuses
   const statuses = checkAllDependencies();
   displayDependencyStatuses(statuses);
 
   // Phase 2: If any missing, offer to install
-  const allInstalled = statuses.every(d => d.installed);
+  const allInstalled = statuses.every(dep => dep.installed);
   if (allInstalled) {
-    return true;
+    return Promise.resolve(true);
   }
 
   return installMissingDependencies(statuses, nonInteractive);
