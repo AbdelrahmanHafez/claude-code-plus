@@ -1,5 +1,5 @@
 main() {
-  local non_interactive="${args['--yes']:-}"
+  local non_interactive="${args_yes:-}"
 
   init_claude_paths
 
@@ -37,7 +37,7 @@ run_custom_install() {
   echo ""
 
   # Shell selection
-  local shell_path="${args['--shell']:-}"
+  local shell_path="${args_shell:-}"
   if [[ -z "$shell_path" ]]; then
     shell_path=$(find_modern_bash)
   fi
@@ -78,7 +78,7 @@ step_deps() {
   warn "Some dependencies missing"
 
   # Non-interactive mode: auto-install
-  if [[ -n "${args['--yes']:-}" ]]; then
+  if [[ -n "${args_yes:-}" ]]; then
     install_missing_deps || exit 1
     return
   fi
@@ -97,7 +97,7 @@ step_deps() {
 step_shell() {
   step "Configuring shell for Claude Code commands"
 
-  local shell_path="${args['--shell']:-}"
+  local shell_path="${args_shell:-}"
 
   # Default to modern bash if not specified
   if [[ -z "$shell_path" ]]; then
@@ -227,6 +227,11 @@ prompt_yes_no() {
   [[ "$reply" =~ ^[Yy]$ ]]
 }
 
+# Replace $HOME with ~ for display
+display_path() {
+  echo "$1" | sed "s|$HOME|~|g"
+}
+
 print_completion() {
   echo ""
   echo "╔════════════════════════════════════════════╗"
@@ -235,18 +240,19 @@ print_completion() {
   echo ""
   success "Better Claude Code is now configured!"
   echo ""
-  info "Settings file: $CLAUDE_SETTINGS"
+  info "Settings file: $(display_path "$CLAUDE_SETTINGS")"
   if [[ -f "$(get_hook_filepath)" ]]; then
-    info "Hook file: $(get_hook_filepath)"
+    info "Hook file: $(display_path "$(get_hook_filepath)")"
   fi
   echo ""
   # Prompt to apply chezmoi if any managed files were modified
   if has_chezmoi_modifications; then
     echo ""
-    # Replace $HOME with ~ for display
+    # Keep real paths for execution, display-friendly version for messages
     local chezmoi_targets="${CHEZMOI_MODIFIED_FILES[*]}"
-    chezmoi_targets="${chezmoi_targets//$HOME/\~}"
-    local chezmoi_cmd="chezmoi apply $chezmoi_targets"
+    local chezmoi_targets_display
+    chezmoi_targets_display="$(display_path "$chezmoi_targets")"
+    local chezmoi_cmd="chezmoi apply $chezmoi_targets_display"
     if prompt_yes_no "Run $(cmd "$chezmoi_cmd") now?" "Y"; then
       # shellcheck disable=SC2086
       chezmoi apply $chezmoi_targets
@@ -264,7 +270,7 @@ print_completion() {
   esac
   info "Open a new terminal or run $(cmd "$source_cmd"), then run $(cmd "claude") to start."
   echo ""
-  info "Review $(cmd "$CLAUDE_SETTINGS") to remove any permissions you don't want auto-approved."
+  info "Review $(cmd "$(display_path "$CLAUDE_SETTINGS")") to remove any permissions you don't want auto-approved."
 }
 
 main

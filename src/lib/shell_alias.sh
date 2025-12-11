@@ -54,7 +54,10 @@ configure_alias() {
   local target_file="$TARGET_FILE"
 
   if alias_already_configured "$target_file"; then
-    info "${shell_type^} alias already configured"
+    # Capitalize first letter (Bash 3.2 compatible)
+    local capitalized
+    capitalized="$(echo "$shell_type" | cut -c1 | tr '[:lower:]' '[:upper:]')$(echo "$shell_type" | cut -c2-)"
+    info "$capitalized alias already configured"
     return 0
   fi
 

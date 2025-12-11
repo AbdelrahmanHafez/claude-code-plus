@@ -1,3 +1,4 @@
 # Bashly settings
-# Disable built-in 4.2 check - we have our own 4.4 check
-enable_bash3_bouncer: never
+# Disable Bash 4+ features for Bash 3.2 compatibility
+enable_inspect_args: never
+enable_deps_array: never
