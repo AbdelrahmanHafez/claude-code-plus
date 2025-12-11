@@ -193,6 +193,64 @@ describe('settings', function() {
       expect(hasPermission('Bash(ls:*)')).toBe(true);
       expect(hasPermission('Bash(grep:*)')).toBe(true);
     });
+
+    it('creates permissions object when settings has no permissions key', function() {
+      // Arrange
+      const { settingsPath } = createTestContext();
+      fs.writeFileSync(settingsPath, JSON.stringify({ env: { FOO: 'bar' } }));
+
+      // Act
+      addPermission('Bash(ls:*)');
+
+      // Assert
+      const settings = getSettings();
+      expect(settings.permissions).toBeDefined();
+      expect(settings.permissions?.allow).toContain('Bash(ls:*)');
+      expect(settings.env?.FOO).toBe('bar'); // preserves existing
+    });
+
+    it('creates allow array when permissions exists but allow is missing', function() {
+      // Arrange
+      const { settingsPath } = createTestContext();
+      fs.writeFileSync(settingsPath, JSON.stringify({ permissions: { deny: ['Bash(rm:*)'] } }));
+
+      // Act
+      addPermission('Bash(ls:*)');
+
+      // Assert
+      const settings = getSettings();
+      expect(settings.permissions?.allow).toContain('Bash(ls:*)');
+      expect(settings.permissions?.deny).toContain('Bash(rm:*)'); // preserves existing
+    });
+
+    it('appends to existing allow array', function() {
+      // Arrange
+      const { settingsPath } = createTestContext();
+      fs.writeFileSync(settingsPath, JSON.stringify({
+        permissions: { allow: ['Bash(existing:*)'] }
+      }));
+
+      // Act
+      addPermission('Bash(ls:*)');
+
+      // Assert
+      const settings = getSettings();
+      expect(settings.permissions?.allow).toContain('Bash(existing:*)');
+      expect(settings.permissions?.allow).toContain('Bash(ls:*)');
+    });
+
+    it('handles permissions with empty allow array', function() {
+      // Arrange
+      const { settingsPath } = createTestContext();
+      fs.writeFileSync(settingsPath, JSON.stringify({ permissions: { allow: [] } }));
+
+      // Act
+      addPermission('Bash(ls:*)');
+
+      // Assert
+      const settings = getSettings();
+      expect(settings.permissions?.allow).toEqual(['Bash(ls:*)']);
+    });
   });
 
   describe('hasPermission()', function() {
@@ -332,6 +390,134 @@ describe('settings', function() {
       expect(settings.hooks?.PreToolUse?.length).toBe(2);
       expect(hasHook('bash-hook.sh')).toBe(true);
       expect(hasHook('read-hook.sh')).toBe(true);
+    });
+
+    it('creates hooks object when settings has no hooks key', function() {
+      // Arrange
+      const { settingsPath } = createTestContext();
+      fs.writeFileSync(settingsPath, JSON.stringify({ env: { FOO: 'bar' } }));
+
+      // Act
+      addHook({ matcher: 'Bash', hooks: [{ type: 'command', command: 'my-hook.sh' }] });
+
+      // Assert
+      const settings = getSettings();
+      expect(settings.hooks).toBeDefined();
+      expect(settings.hooks?.PreToolUse).toBeDefined();
+      expect(hasHook('my-hook.sh')).toBe(true);
+      expect(settings.env?.FOO).toBe('bar'); // preserves existing
+    });
+
+    it('creates PreToolUse array when hooks exists but PreToolUse is missing', function() {
+      // Arrange
+      const { settingsPath } = createTestContext();
+      fs.writeFileSync(settingsPath, JSON.stringify({ hooks: { PostToolUse: [] } }));
+
+      // Act
+      addHook({ matcher: 'Bash', hooks: [{ type: 'command', command: 'my-hook.sh' }] });
+
+      // Assert
+      const settings = getSettings();
+      expect(settings.hooks?.PreToolUse).toBeDefined();
+      expect(settings.hooks?.PreToolUse?.length).toBe(1);
+      expect(hasHook('my-hook.sh')).toBe(true);
+    });
+
+    it('handles hooks with empty PreToolUse array', function() {
+      // Arrange
+      const { settingsPath } = createTestContext();
+      fs.writeFileSync(settingsPath, JSON.stringify({ hooks: { PreToolUse: [] } }));
+
+      // Act
+      addHook({ matcher: 'Bash', hooks: [{ type: 'command', command: 'my-hook.sh' }] });
+
+      // Assert
+      const settings = getSettings();
+      expect(settings.hooks?.PreToolUse?.length).toBe(1);
+      expect(settings.hooks?.PreToolUse?.[0].matcher).toBe('Bash');
+      expect(hasHook('my-hook.sh')).toBe(true);
+    });
+
+    it('handles PreToolUse with entries but no Bash matcher', function() {
+      // Arrange
+      const { settingsPath } = createTestContext();
+      fs.writeFileSync(settingsPath, JSON.stringify({
+        hooks: {
+          PreToolUse: [
+            { matcher: 'Read', hooks: [{ type: 'command', command: 'read-hook.sh' }] }
+          ]
+        }
+      }));
+
+      // Act
+      addHook({ matcher: 'Bash', hooks: [{ type: 'command', command: 'bash-hook.sh' }] });
+
+      // Assert
+      const settings = getSettings();
+      expect(settings.hooks?.PreToolUse?.length).toBe(2);
+      expect(hasHook('read-hook.sh')).toBe(true); // preserves existing
+      expect(hasHook('bash-hook.sh')).toBe(true);
+    });
+
+    it('handles Bash matcher with empty hooks array', function() {
+      // Arrange
+      const { settingsPath } = createTestContext();
+      fs.writeFileSync(settingsPath, JSON.stringify({
+        hooks: {
+          PreToolUse: [
+            { matcher: 'Bash', hooks: [] }
+          ]
+        }
+      }));
+
+      // Act
+      addHook({ matcher: 'Bash', hooks: [{ type: 'command', command: 'my-hook.sh' }] });
+
+      // Assert
+      const settings = getSettings();
+      const bashHook = settings.hooks?.PreToolUse?.find(h => h.matcher === 'Bash');
+      expect(bashHook?.hooks.length).toBe(1);
+      expect(bashHook?.hooks[0].command).toBe('my-hook.sh');
+    });
+
+    it('appends to existing Bash matcher hooks', function() {
+      // Arrange
+      const { settingsPath } = createTestContext();
+      fs.writeFileSync(settingsPath, JSON.stringify({
+        hooks: {
+          PreToolUse: [
+            { matcher: 'Bash', hooks: [{ type: 'command', command: 'existing-hook.sh' }] }
+          ]
+        }
+      }));
+
+      // Act
+      addHook({ matcher: 'Bash', hooks: [{ type: 'command', command: 'new-hook.sh' }] });
+
+      // Assert
+      const settings = getSettings();
+      const bashHook = settings.hooks?.PreToolUse?.find(h => h.matcher === 'Bash');
+      expect(bashHook?.hooks.length).toBe(2);
+      expect(bashHook?.hooks.some(h => h.command === 'existing-hook.sh')).toBe(true);
+      expect(bashHook?.hooks.some(h => h.command === 'new-hook.sh')).toBe(true);
+    });
+
+    it('preserves other hook types when adding PreToolUse', function() {
+      // Arrange
+      const { settingsPath } = createTestContext();
+      fs.writeFileSync(settingsPath, JSON.stringify({
+        hooks: {
+          PostToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: 'post-hook.sh' }] }]
+        }
+      }));
+
+      // Act
+      addHook({ matcher: 'Bash', hooks: [{ type: 'command', command: 'pre-hook.sh' }] });
+
+      // Assert
+      const settings = getSettings();
+      expect(settings.hooks?.PostToolUse).toBeDefined();
+      expect(settings.hooks?.PreToolUse).toBeDefined();
     });
   });
 

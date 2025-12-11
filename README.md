@@ -7,13 +7,13 @@ Enhancements for [Claude Code](https://docs.anthropic.com/en/docs/claude-code) C
 ## Quick Install
 
 ```bash
-npx claude-code-plus
+npx claude-code-plus -y
 ```
 
-Or with non-interactive mode (accepts all defaults):
+Or run interactively to customize what gets installed:
 
 ```bash
-npx claude-code-plus -y
+npx claude-code-plus
 ```
 
 ## What This Does
@@ -26,7 +26,7 @@ npx claude-code-plus -y
 
 ### 2. Shell Configuration for Commands (Issue [#7490](https://github.com/anthropics/claude-code/issues/7490))
 
-**The limitation:** Claude Code ignores the `$SHELL` environment variable and always uses the system default shell (`/bin/zsh` on macOS) when executing Bash tool commands. Even launching with `SHELL=/opt/homebrew/bin/fish claude` doesn't help. This means you lose access to your PATH, aliases, and shell-specific configuration.
+**The limitation:** Claude Code ignores the `$SHELL` environment variable and always uses the system default shell (`/bin/zsh` on macOS) when executing Bash tool commands. Even launching with `SHELL=/opt/homebrew/bin/bash claude` doesn't help. This means you lose access to your PATH, aliases, and shell-specific configuration.
 
 **What we add:** A shell alias that wraps the `claude` command to set `SHELL` in a way that Claude Code respects, plus configures `env.SHELL` in settings.json for when the upstream fix lands.
 
