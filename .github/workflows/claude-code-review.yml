@@ -27,9 +27,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
+        uses: actions/checkout@v6
 
       - name: Run Claude Code Review
         id: claude-review

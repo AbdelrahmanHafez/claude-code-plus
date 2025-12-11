@@ -12,9 +12,7 @@ jobs:
     name: Unit Tests (Jest)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
+      - uses: actions/checkout@v6
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -32,9 +30,7 @@ jobs:
     name: Hook Tests (Bats)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
+      - uses: actions/checkout@v6
 
       - name: Install dependencies
         run: |
