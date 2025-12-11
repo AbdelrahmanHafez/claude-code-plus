@@ -251,6 +251,34 @@ sed -n '45,95p' src/old-file.ts > src/new-file.ts
 - Small extractions (<15 lines) - just use Edit tool
 - Making small edits to existing files (use Edit tool)
 
+## Pull Request Guidelines
+
+When creating pull requests for this repository, always add the appropriate label:
+
+**Available labels:**
+- `bug` - Something isn't working
+- `documentation` - Improvements or additions to documentation
+- `enhancement` / `feature` - New feature or request
+- `chore` - Maintenance and chores
+- `maintenance` - Maintenance tasks
+- `dependencies` - Dependency updates
+- `performance` - Performance improvements
+- `security` - Security related
+- `breaking-change` - Breaking change
+- `refactor` - Code refactoring
+- `ci` - CI/CD related
+
+**How to add labels:**
+```bash
+# When creating PR via gh CLI
+gh pr create --label "chore" ...
+
+# Or after creation
+gh pr edit <number> --add-label "feature"
+```
+
+Fetch current labels: `gh label list --repo AbdelrahmanHafez/claude-code-plus`
+
 ## Related Issues
 
 - [#13340](https://github.com/anthropics/claude-code/issues/13340) - Piped commands permission limitation
