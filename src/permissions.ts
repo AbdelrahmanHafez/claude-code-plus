@@ -9,6 +9,7 @@ export const DEFAULT_PERMISSIONS: string[] = [
   'Bash(R --version:*)',
   'Bash(Rscript --version:*)',
   'Bash(actionlint --version:*)',
+  'Bash(actionlint:*)',
   'Bash(age --version:*)',
   'Bash(ansible --version:*)',
   'Bash(ansible-galaxy list:*)',
