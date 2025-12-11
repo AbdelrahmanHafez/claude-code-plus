@@ -28,6 +28,10 @@
   ],
   "author": "",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AbdelrahmanHafez/claude-code-plus"
+  },
   "devDependencies": {
     "@eslint/js": "^9.0.0",
     "@stylistic/eslint-plugin": "^2.0.0",
