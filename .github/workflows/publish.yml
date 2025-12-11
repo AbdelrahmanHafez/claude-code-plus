@@ -9,8 +9,13 @@ on:
         type: string
 
 jobs:
+  test:
+    uses: ./.github/workflows/test.yml
+
   publish:
+    needs: test
     runs-on: ubuntu-latest
+    environment: release # Must match npm trusted publisher config
     permissions:
       contents: write
       id-token: write
@@ -26,9 +31,6 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
-
-      - name: Run tests
-        run: npm test
 
       - name: Run linter
         run: npm run lint
