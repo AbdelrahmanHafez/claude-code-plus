@@ -324,11 +324,17 @@ def get_part_value:
     ""
   end;
 
-# Recursively find all CmdSubst and ProcSubst nodes in word parts (handles DblQuoted nesting)
+# Recursively find all CmdSubst and ProcSubst nodes in word parts
+# Handles: DblQuoted, ParamExp (defaults, replacements), Array elements, etc.
 def find_cmd_substs:
   if type == "object" then
     if .Type == "CmdSubst" or .Type == "ProcSubst" then .
     elif .Type == "DblQuoted" then .Parts[]? | find_cmd_substs
+    elif .Type == "ParamExp" then
+      # Parameter expansion: ${var:-$(cmd)}, ${var:=$(cmd)}, ${var/$(old)/$(new)}
+      (.Exp?.Word | find_cmd_substs),
+      (.Repl?.Orig | find_cmd_substs),
+      (.Repl?.With | find_cmd_substs)
     elif .Parts then .Parts[]? | find_cmd_substs
     else empty
     end
@@ -353,8 +359,14 @@ def extract_commands:
   if type == "object" then
     if .Type == "CallExpr" then
       get_command_string,
-      # Also extract nested command substitutions (including inside DblQuoted)
-      (.Args[]? | find_cmd_substs | .Stmts[]? | extract_commands)
+      # Extract nested command substitutions from arguments
+      (.Args[]? | find_cmd_substs | .Stmts[]? | extract_commands),
+      # Extract from variable assignments: var=$(cmd1 | cmd2)
+      (.Assigns[]?.Value | find_cmd_substs | .Stmts[]? | extract_commands),
+      # Extract from array assignments: arr=($(cmd1) $(cmd2))
+      (.Assigns[]?.Array?.Elems[]?.Value | find_cmd_substs | .Stmts[]? | extract_commands),
+      # Extract from redirects with process substitution: cmd < <(other_cmd)
+      (.Redirs[]?.Word | find_cmd_substs | .Stmts[]? | extract_commands)
     elif .Type == "BinaryCmd" then
       (.X | extract_commands),
       (.Y | extract_commands)
@@ -376,7 +388,9 @@ def extract_commands:
     elif .Type == "CaseClause" then
       (.Items[]?.Stmts[]? | extract_commands)
     elif .Cmd then
-      (.Cmd | extract_commands)
+      (.Cmd | extract_commands),
+      # Also extract from redirects at statement level: cmd < <(other_cmd)
+      (.Redirs[]?.Word | find_cmd_substs | .Stmts[]? | extract_commands)
     elif .Stmts then
       (.Stmts[] | extract_commands)
     else

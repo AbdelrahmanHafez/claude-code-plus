@@ -193,3 +193,45 @@ load hook_test_helper
   run_hook_block 'if rm file; then echo done; fi' '["Bash(echo:*)"]'
   assert_blocked
 }
+
+# =============================================================================
+# Category 10: Variable Assignments with Command Substitutions
+# =============================================================================
+
+@test "parse: variable assignment with command substitution pipe" {
+  # Bug: commands inside variable assignments are not extracted
+  # This is the user-reported case: count=$(find ... | wc -l | tr -d ' ')
+  run_parse_commands 'count=$(find /path -name "*.sql" | wc -l | tr -d " ")'
+  assert_commands 'find /path -name "*.sql"' "wc -l" 'tr -d " "'
+}
+
+@test "parse: for loop with variable assignment containing pipe" {
+  # Real-world case: iterating directories and counting files
+  run_parse_commands 'for dir in /path/*; do
+    if [ -d "$dir" ]; then
+      count=$(find "$dir" -type f -name "*.sql" | wc -l | tr -d " ")
+      echo "$(basename "$dir"): $count SQL files"
+    fi
+  done'
+  assert_commands '[ -d "$dir" ]' 'find "$dir" -type f -name "*.sql"' "wc -l" 'tr -d " "' 'echo "$(..): $count SQL files"' 'basename "$dir"'
+}
+
+@test "parse: simple variable assignment with command substitution" {
+  run_parse_commands 'result=$(ls -la)'
+  assert_commands "ls -la"
+}
+
+@test "parse: variable assignment with nested command substitution" {
+  run_parse_commands 'x=$(echo $(date))'
+  assert_commands "echo \$(..)" "date"
+}
+
+@test "permission: allow variable assignment when all pipe commands permitted" {
+  run_hook_allow 'count=$(find /path -name "*.sql" | wc -l | tr -d " ")' '["Bash(find:*)", "Bash(wc:*)", "Bash(tr:*)"]'
+  assert_allowed
+}
+
+@test "permission: block variable assignment when one pipe command not permitted" {
+  run_hook_block 'count=$(find /path -name "*.sql" | wc -l | tr -d " ")' '["Bash(find:*)", "Bash(wc:*)"]'
+  assert_blocked
+}
