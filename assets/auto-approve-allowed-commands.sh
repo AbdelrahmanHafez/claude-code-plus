@@ -24,6 +24,17 @@
 
 set -euo pipefail
 
+# Re-exec with modern bash if running in old bash (mapfile requires bash 4+)
+if [[ "${BASH_VERSINFO[0]}" -lt 4 ]]; then
+  for try_bash in /opt/homebrew/bin/bash /usr/local/bin/bash /home/linuxbrew/.linuxbrew/bin/bash; do
+    if [[ -x "$try_bash" ]]; then
+      exec "$try_bash" "$0" "$@"
+    fi
+  done
+  # No modern bash found, fall through to normal permission check
+  exit 0
+fi
+
 # Debug mode
 DEBUG=false
 NUL_DELIM=false
