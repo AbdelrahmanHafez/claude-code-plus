@@ -848,6 +848,7 @@ export const DEFAULT_PERMISSIONS: string[] = [
   'Bash(vim --version:*)',
   'Bash(virtualenv --version:*)',
   'Bash(vm_stat:*)',
+  'Bash(wait:*)',
   'Bash(volta --version:*)',
   'Bash(volta list:*)',
   'Bash(watchman --version:*)',
