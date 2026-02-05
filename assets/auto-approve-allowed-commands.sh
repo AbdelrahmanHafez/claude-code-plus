@@ -72,8 +72,25 @@ extract_prefixes_from_file() {
 }
 
 # Find git root directory (project root)
+# For worktrees, returns the main repository path (not the worktree path)
 find_git_root() {
-  git rev-parse --show-toplevel 2>/dev/null
+  local toplevel
+  toplevel=$(git rev-parse --show-toplevel 2>/dev/null) || return
+
+  # Check if we're in a worktree by comparing git-dir and git-common-dir
+  local git_dir git_common_dir
+  git_dir=$(git rev-parse --git-dir 2>/dev/null)
+  git_common_dir=$(git rev-parse --git-common-dir 2>/dev/null)
+
+  # If git-dir and git-common-dir differ, we're in a worktree
+  # The main repo is the parent of git-common-dir
+  if [[ "$git_dir" != "$git_common_dir" ]]; then
+    # git_common_dir is like /path/to/main-repo/.git
+    # We want /path/to/main-repo
+    dirname "$git_common_dir"
+  else
+    echo "$toplevel"
+  fi
 }
 
 # Get all allowed prefixes from all settings files (or custom permissions if set for testing)
