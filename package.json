@@ -33,7 +33,7 @@
     "url": "https://github.com/AbdelrahmanHafez/claude-code-plus"
   },
   "devDependencies": {
-    "@eslint/js": "^9.0.0",
+    "@eslint/js": "^10.0.1",
     "@stylistic/eslint-plugin": "^5.6.1",
     "@types/jest": "^30.0.0",
     "@types/node": "^25.0.0",
